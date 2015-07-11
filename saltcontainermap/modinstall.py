@@ -50,21 +50,24 @@ def link_module(salt_path, lib_dir, sub_dir, file_name):
         os.mkdir(link_dir)
         open(init_path, 'a').close()
         os.symlink(module_path, link_path)
-    else:
-        if os.path.lexists(link_path):
-            if os.path.islink(link_path):
-                link_target = os.readlink(link_path)
-                if link_target != module_path:
-                    log.warning("File %s exists, but is not a symlink pointing to %s.", link_path, module_path)
-                else:
-                    log.info("Found existing symlink.")
+        return True
+
+    if os.path.lexists(link_path):
+        if os.path.islink(link_path):
+            link_target = os.readlink(link_path)
+            if link_target != module_path:
+                log.warning("File %s exists, but is not a symlink pointing to %s.", link_path, module_path)
             else:
-                log.warning("File %s exists, but is not a symbolic link.", link_path)
+                log.info("Found existing symlink.")
         else:
-            log.info("creating symlink %s -> %s", link_path, module_path)
-            if not os.path.exists(init_path):
-                open(init_path, 'a').close()
-            os.symlink(module_path, link_path)
+            log.warning("File %s exists, but is not a symbolic link.", link_path)
+        return False
+
+    log.info("creating symlink %s -> %s", link_path, module_path)
+    if not os.path.exists(init_path):
+        open(init_path, 'a').close()
+    os.symlink(module_path, link_path)
+    return True
 
 
 def unlink_module(salt_path, sub_dir, file_name):
@@ -73,6 +76,8 @@ def unlink_module(salt_path, sub_dir, file_name):
     link_path = os.path.join(link_dir, file_name)
     if os.path.islink(link_path):
         os.unlink(link_path)
+        return True
+    return False
 
 
 def get_env():
@@ -121,13 +126,22 @@ def get_env():
 
 def install_modules():
     env = get_env()
-    link_module(env.salt_extmods, os.path.join(env.lib_path, 'extmods'), 'renderers', 'lazy_yaml.py')
-    link_module(env.salt_root, os.path.join(env.lib_path, 'modules'), '_modules', 'container_map.py')
-    link_module(env.salt_root, os.path.join(env.lib_path, 'states'), '_states', 'container_map.py')
+    res_extmod = link_module(env.salt_extmods, os.path.join(env.lib_path, 'extmods'), 'renderers', 'lazy_yaml.py')
+    res_mod = link_module(env.salt_root, os.path.join(env.lib_path, 'modules'), '_modules', 'container_map.py')
+    res_state = link_module(env.salt_root, os.path.join(env.lib_path, 'states'), '_states', 'container_map.py')
+    if res_extmod:
+        log.info("Installed master extension module. Please restart the salt master process for using it.")
+    if res_mod and res_state:
+        log.info("Installed minion modules. Distribute with 'saltutil.sync_all' or 'state.highstate'.")
 
 
 def remove_modules():
     env = get_env()
-    unlink_module(env.salt_extmods, 'renderers', 'lazy_yaml.py')
-    unlink_module(env.salt_root, '_modules', 'container_map.py')
-    unlink_module(env.salt_root, '_states', 'container_map.py')
+    res_extmod = unlink_module(env.salt_extmods, 'renderers', 'lazy_yaml.py')
+    res_mod = unlink_module(env.salt_root, '_modules', 'container_map.py')
+    res_state = unlink_module(env.salt_root, '_states', 'container_map.py')
+    if res_extmod:
+        log.info("Removed master extension module. It will not be available after the master process is restarted.")
+    if res_mod and res_state:
+        log.info("Removed minion modules. 'saltutil.clear_cache' can be used for distributing the removal, but "
+                 "'saltutil.sync_all' should be run immediately afterwards if you have any other custom modules.")
