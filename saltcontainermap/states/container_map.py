@@ -7,6 +7,7 @@ dependencies in Salt states. It complements Salt's ``dockerio`` module with the 
 * Automated provision of containers for the purpose of selectively sharing data between containers (`attached`
   containers).
 * Automated re-creation of containers when their running state diverts from the configuration in
+
   * image id,
   * volume paths,
   * ports,
@@ -16,7 +17,7 @@ Maps can be stored in a pillar ``container_maps`` (or any other name set in the 
 ``container_map.pillar_name``). When using the ``lazy_yaml`` renderer, pillar values can be used as far as custom
 tags are valid in YAML. The ``lazy_yaml`` module has to be accessible by the master.
 
-  .. code-block:: yaml
+.. code-block:: yaml
 
   #!lazy_yaml
 
@@ -28,7 +29,7 @@ tags are valid in YAML. The ``lazy_yaml`` module has to be accessible by the mas
         web_server:
           image: nginx
           binds:
-            !pillar web:host_paths:config
+            !pillar web:host_paths:config:
               - !pillar web:host_paths:config
               - ro
           uses: app_server_socket
@@ -67,7 +68,7 @@ For skipping the dependency check of incomplete maps, add ``skip_check: True`` o
 
 For merging a pillar into an existing one, use ``merge_into``, e.g.
 
-    .. code-block:: yaml
+.. code-block:: yaml
 
     container_map:
       extra_app:
@@ -86,7 +87,7 @@ volumes to the ``web_server`` container, and each of the instances ``app_config.
 When the image ``app`` changes, on re-execution of the state containers are stopped, removed, re-created and restarted
 as necessary.
 
-    .. code-block:: yaml
+.. code-block:: yaml
 
     webapp.web_server:
       container_map.updated: []
@@ -96,6 +97,7 @@ For a full description of `Docker-Map <https://github.com/merll/docker-map>`_, p
 `its documentation <http://docker-map.readthedocs.org/en/latest/>`_.
 '''
 from __future__ import unicode_literals
+
 
 def set_up(name, containers=None, volumes=None, host=None, host_root=None, repository=None, default_domain=None,
            check_integrity=True, ignore_existing=False):
