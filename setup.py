@@ -13,7 +13,7 @@ setup(
     license='MIT',
     author='Matthias Erll',
     author_email='matthias@erll.de',
-    description='Configuration management and implicit dependency tracking for Docker containers in SaltStack.',
+    description='Configuration management and implicit dependency setup for Docker containers in SaltStack.',
     platforms=['OS Independent'],
     keywords=['docker', 'deployment', 'salt'],
     classifiers=[
