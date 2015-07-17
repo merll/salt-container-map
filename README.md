@@ -6,10 +6,11 @@ Configuration management and implicit dependency setup for Docker containers in 
 
 Project: https://github.com/merll/salt-container-map
 
-Docs: Basic usage is provided in the [state module]
-(http://salt-container-map.readthedocs.org/en/latest/api/saltcontainermap.states.html). Details about container
-configurations are available in the [docs for Docker-Map]
-(https://docker-map.readthedocs.org/en/latest/guide/containers/maps.html#container-landscapes-with-containermap).
+Docs: Basic usage is provided in the
+[state module](http://salt-container-map.readthedocs.org/en/latest/api/saltcontainermap.states.html).
+Details about container
+configurations are available in the
+[docs for Docker-Map](https://docker-map.readthedocs.org/en/latest/guide/containers/maps.html#container-landscapes-with-containermap).
 
 
 Overview
@@ -54,5 +55,5 @@ configuration by setting
 State and execution module
 --------------------------
 The modules distributed to the minions provide the functionality as outlined in the overview.
-A usage example is included in the [state module documentation]
-(http://salt-container-map.readthedocs.org/en/latest/api/saltcontainermap.states.html).
+A usage example is included in the
+[state module documentation](http://salt-container-map.readthedocs.org/en/latest/api/saltcontainermap.states.html).

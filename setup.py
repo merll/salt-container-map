@@ -1,7 +1,22 @@
 # -*- coding: utf-8 -*-
+from distutils.spawn import find_executable
+import os
 from setuptools import setup, find_packages
 
 from saltcontainermap import __version__
+
+
+def include_readme():
+    try:
+        import pandoc
+    except ImportError:
+        return ''
+    pandoc.core.PANDOC_PATH = find_executable('pandoc')
+    readme_file = os.path.join(os.path.dirname(__file__), 'README.md')
+    doc = pandoc.Document()
+    with open(readme_file, 'r') as rf:
+        doc.markdown = rf.read()
+        return doc.rst
 
 
 setup(
@@ -13,7 +28,9 @@ setup(
     license='MIT',
     author='Matthias Erll',
     author_email='matthias@erll.de',
+    url='https://github.com/merll/salt-container-map',
     description='Configuration management and implicit dependency setup for Docker containers in SaltStack.',
+    long_description=include_readme(),
     platforms=['OS Independent'],
     keywords=['docker', 'deployment', 'salt'],
     classifiers=[
