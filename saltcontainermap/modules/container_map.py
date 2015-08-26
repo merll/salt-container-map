@@ -266,22 +266,22 @@ def _create_client(initial_maps):
                                ('stop_timeout', None, 'docker:stop_timeout'),
                                ('wait_timeout', None, 'docker:wait_timeout')):
                 if kw not in kwargs:
-                    pillar_value = pillar_get(pk)
-                    if pillar_value:
+                    pillar_value = pillar_get(pk, None)
+                    if pillar_value is not None:
                         kwargs[kw] = pillar_value
                     elif ck:
-                        config_value = config_get(ck)
-                        if config_value:
+                        config_value = config_get(ck, None)
+                        if config_value is not None:
                             kwargs[kw] = config_value
             if 'base_url' not in kwargs and 'DOCKER_HOST' in os.environ:
                 kwargs['base_url'] = os.environ['DOCKER_HOST']
             if 'domainname' not in kwargs:
-                kwargs['domainname'] = pillar_get('container_map:domainname') or grains_get('domain') or \
-                    grains_get('container_map:domainname')
+                kwargs['domainname'] = (pillar_get('container_map:domainname') or grains_get('domain') or
+                                        grains_get('container_map:domainname'))
             interfaces = {if_name: if_addresses[0]
                           for if_name, if_addresses in six.iteritems(grains_get('ip_interfaces', {})) if if_addresses}
-            aliases = grains_get('container_map:interface_aliases') or pillar_get('container_map:interface_aliases') or \
-                config_get('container_map.interface_aliases', {})
+            aliases = (grains_get('container_map:interface_aliases') or pillar_get('container_map:interface_aliases') or
+                       config_get('container_map.interface_aliases', {}))
             aliased_if = {alias: interfaces.get(if_name)
                           for alias, if_name in six.iteritems(aliases)}
             interfaces.update(aliased_if)
@@ -821,7 +821,7 @@ def script(container, instance=None, map_name=None, wait_timeout=10, autoremove_
             else:
                 cached_name = __salt__['cp.cache_file'](source, saltenv)
                 if not cached_name:
-                    raise SaltInvocationError("Failed to cache source file %s.", source)
+                    raise SaltInvocationError("Failed to cache source file {0}.".format(source))
                 shutil.copyfile(cached_name, script_path)
         else:
             if content_pillar and not contents:
