@@ -365,14 +365,21 @@ def get_client():
         return client
 
     config_get = __salt__['config.get']
+    pillar_get = __salt__['pillar.get']
     log.debug("Configuring ExtType.")
     ext_resolver = _get_resolver(config_get('lazy_yaml.ext_code_pillar', 10),
                                  config_get('lazy_yaml.ext_code_grain', 11))
     resolve_dict = {expand_type_name(ExtType): ext_resolver.get}
     log.debug("Loading container maps.")
     pillar_name = config_get('container_map.pillar_name', 'container_maps')
-    map_dicts = __pillar__.get(pillar_name, {})
+    map_dicts = pillar_get(pillar_name, {})
     all_maps = {}
+    attached_parent_name = pillar_get('container_map:use_attached_parent_name', None)
+    if attached_parent_name is None:
+        attached_parent_name = config_get('container_map:use_attached_parent_name', False)
+    skip_checks = pillar_get('container_map:skip_checks', None)
+    if skip_checks is None:
+        skip_checks = config_get('container_map:skip_checks', False)
     if map_dicts:
         log.info("Initializing container maps: %s", ', '.join(map_dicts.keys()))
         merge_maps = defaultdict(list)
@@ -382,9 +389,12 @@ def get_client():
             if merge_into:
                 merge_maps[merge_into].append(resolved_content)
             else:
-                check_integrity = not resolved_content.pop('skip_check', False)
+                check_integrity = not resolved_content.pop('skip_check', skip_checks)
                 try:
-                    all_maps[map_name] = ContainerMap(map_name, resolved_content, check_integrity=check_integrity)
+                    a_p_name = resolved_content.pop('use_attached_parent_name', attached_parent_name)
+                    c_map = ContainerMap(map_name, resolved_content, check_integrity=check_integrity,
+                                         use_attached_parent_name=a_p_name)
+                    all_maps[map_name] = c_map
                 except MapIntegrityError as e:
                     log.error("Skipping map %s because of integrity error: %s", map_name, e.message)
         for map_name, merge_contents in six.iteritems(merge_maps):
