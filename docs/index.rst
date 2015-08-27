@@ -30,6 +30,7 @@ Contents:
     :maxdepth: 2
 
     installation
+    config
     api/saltcontainermap.states
     api/saltcontainermap.modules
     api/saltcontainermap.extmods
