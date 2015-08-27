@@ -50,7 +50,7 @@ which are resolved to their values on the minion just before the container maps 
 configurations are instantiated.
 
 By default, container maps are loaded from a pillar `container_maps`. This can be changed in the
-configuration by setting
+configuration by setting the configuration value `container_map.pillar_name`.
 
 State and execution module
 --------------------------
