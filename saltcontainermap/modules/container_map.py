@@ -379,7 +379,7 @@ def get_client():
         attached_parent_name = config_get('container_map:use_attached_parent_name', False)
     skip_checks = pillar_get('container_map:skip_checks', None)
     if skip_checks is None:
-        skip_checks = config_get('container_map:skip_checks', False)
+        skip_checks = config_get('container_map.skip_checks', False)
     if map_dicts:
         log.info("Initializing container maps: %s", ', '.join(map_dicts.keys()))
         merge_maps = defaultdict(list)
