@@ -384,19 +384,23 @@ def get_client():
         log.info("Initializing container maps: %s", ', '.join(map_dicts.keys()))
         merge_maps = defaultdict(list)
         for map_name, map_content in six.iteritems(map_dicts):
-            resolved_content = resolve_deep(map_content, types=resolve_dict)
-            merge_into = resolved_content.pop('merge_into', None)
-            if merge_into:
-                merge_maps[merge_into].append(resolved_content)
+            try:
+                resolved_content = resolve_deep(map_content, types=resolve_dict)
+            except KeyError:
+                log.error("Skipping map %s due to error: %s", map_name, e.message)
             else:
-                check_integrity = not resolved_content.pop('skip_check', skip_checks)
-                try:
-                    a_p_name = resolved_content.pop('use_attached_parent_name', attached_parent_name)
-                    c_map = ContainerMap(map_name, resolved_content, check_integrity=check_integrity,
-                                         use_attached_parent_name=a_p_name)
-                    all_maps[map_name] = c_map
-                except MapIntegrityError as e:
-                    log.error("Skipping map %s because of integrity error: %s", map_name, e.message)
+                merge_into = resolved_content.pop('merge_into', None)
+                if merge_into:
+                    merge_maps[merge_into].append(resolved_content)
+                else:
+                    check_integrity = not resolved_content.pop('skip_check', skip_checks)
+                    try:
+                        a_p_name = resolved_content.pop('use_attached_parent_name', attached_parent_name)
+                        c_map = ContainerMap(map_name, resolved_content, check_integrity=check_integrity,
+                                             use_attached_parent_name=a_p_name)
+                        all_maps[map_name] = c_map
+                    except MapIntegrityError as e:
+                        log.error("Skipping map %s because of integrity error: %s", map_name, e.message)
         for map_name, merge_contents in six.iteritems(merge_maps):
             merge_into_map = all_maps.get(map_name)
             for merge_content in merge_contents:
