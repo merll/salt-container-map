@@ -34,6 +34,7 @@ Contents:
     api/saltcontainermap.states
     api/saltcontainermap.modules
     api/saltcontainermap.extmods
+    changes
 
 
 Indices and tables
