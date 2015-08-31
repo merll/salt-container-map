@@ -776,7 +776,7 @@ def script(container, instance=None, map_name=None, wait_timeout=10, autoremove_
         By default any container created in this process will be removed (except for attached and persistent ones).
         Setting this to ``False`` leaves them in place.
     source
-        Script source file (e.g. ``salt://...`` for a script file loaded form the master).
+        Script source file (e.g. ``salt://...`` for a script file loaded from the master).
     saltenv : 'base'
         Salt environment to use for loading source files.
     template
@@ -802,7 +802,7 @@ def script(container, instance=None, map_name=None, wait_timeout=10, autoremove_
         Command to run in the container. Overrides the command set in the configuration or the image. Can include
         a variable ``{script_path}`` for substituting host-paths with container mount points.
     container_script_dir : '/tmp/script_run'
-        Directory to use as moint point inside the container.
+        Directory to use as mount point inside the container.
     timestamps
         Include time stamps with `stdout` output. Passed to `docker-py`.
     tail : 'all'
