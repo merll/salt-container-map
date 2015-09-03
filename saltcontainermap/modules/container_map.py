@@ -95,6 +95,18 @@ def _get_auth_data(registry):
     return None
 
 
+def _get_setting(prefix, name, default=None):
+    pg_name = '{0}:{1}'.format(prefix, name)
+    value = __salt__['pillar.get'](pg_name, None)
+    if value is not None:
+        return value
+    value = __salt__['grains.get'](pg_name, None)
+    if value is not None:
+        return value
+    config_name = '{0}.{1}'.format(prefix, name)
+    return __salt__['config.get'](config_name, default)
+
+
 def _create_client(initial_maps):
     """
     :type initial_maps: dict[unicode, ContainerMap]
@@ -257,31 +269,23 @@ def _create_client(initial_maps):
         client_constructor = SaltDockerClient
 
         def __init__(self, *args, **kwargs):
-            config_get = __salt__['config.get']
             grains_get = __salt__['grains.get']
-            pillar_get = __salt__['pillar.get']
-            for kw, ck, pk in (('base_url', 'docker.url', 'docker:url'),
-                               ('timeout', 'docker.timeout', 'docker:timeout'),
-                               ('version', 'docker.version', 'docker:version'),
-                               ('stop_timeout', None, 'docker:stop_timeout'),
-                               ('wait_timeout', None, 'docker:wait_timeout')):
+            for kw, name in (('base_url', 'url'),
+                             ('timeout', 'timeout'),
+                             ('version', 'version'),
+                             ('stop_timeout', 'stop_timeout'),
+                             ('wait_timeout', 'wait_timeout')):
                 if kw not in kwargs:
-                    pillar_value = pillar_get(pk, None)
-                    if pillar_value is not None:
-                        kwargs[kw] = pillar_value
-                    elif ck:
-                        config_value = config_get(ck, None)
-                        if config_value is not None:
-                            kwargs[kw] = config_value
+                    value = _get_setting('docker', name)
+                    if value is not None:
+                        kwargs[kw] = value
             if 'base_url' not in kwargs and 'DOCKER_HOST' in os.environ:
                 kwargs['base_url'] = os.environ['DOCKER_HOST']
             if 'domainname' not in kwargs:
-                kwargs['domainname'] = (pillar_get('container_map:domainname') or grains_get('domain') or
-                                        grains_get('container_map:domainname'))
+                kwargs['domainname'] = _get_setting('container_map', 'domainname')
             interfaces = {if_name: if_addresses[0]
                           for if_name, if_addresses in six.iteritems(grains_get('ip_interfaces', {})) if if_addresses}
-            aliases = (grains_get('container_map:interface_aliases') or pillar_get('container_map:interface_aliases') or
-                       config_get('container_map.interface_aliases', {}))
+            aliases = _get_setting('container_map', 'interface_aliases', {})
             aliased_if = {alias: interfaces.get(if_name)
                           for alias, if_name in six.iteritems(aliases)}
             interfaces.update(aliased_if)
@@ -365,29 +369,27 @@ def get_client():
         return client
 
     config_get = __salt__['config.get']
-    pillar_get = __salt__['pillar.get']
     log.debug("Configuring ExtType.")
     ext_resolver = _get_resolver(config_get('lazy_yaml.ext_code_pillar', 10),
                                  config_get('lazy_yaml.ext_code_grain', 11))
     resolve_dict = {expand_type_name(ExtType): ext_resolver.get}
     log.debug("Loading container maps.")
     pillar_name = config_get('container_map.pillar_name', 'container_maps')
-    map_dicts = pillar_get(pillar_name, {})
+    map_dicts = __salt__['pillar.get'](pillar_name, {})
     all_maps = {}
-    attached_parent_name = pillar_get('container_map:use_attached_parent_name', None)
-    if attached_parent_name is None:
-        attached_parent_name = config_get('container_map:use_attached_parent_name', False)
-    skip_checks = pillar_get('container_map:skip_checks', None)
-    if skip_checks is None:
-        skip_checks = config_get('container_map.skip_checks', False)
+    attached_parent_name = _get_setting('container_map', 'use_attached_parent_name', False)
+    skip_checks = _get_setting('container_map', 'skip_checks', False)
+    raise_map_errors = _get_setting('container_map', 'raise_map_errors', True)
     if map_dicts:
         log.info("Initializing container maps: %s", ', '.join(map_dicts.keys()))
         merge_maps = defaultdict(list)
         for map_name, map_content in six.iteritems(map_dicts):
             try:
                 resolved_content = resolve_deep(map_content, types=resolve_dict)
-            except KeyError:
-                log.error("Skipping map %s due to error: %s", map_name, e.message)
+            except KeyError as e:
+                log.error("Skipping map %s due to error: %s", map_name, e.args[0])
+                if raise_map_errors:
+                    raise e
             else:
                 merge_into = resolved_content.pop('merge_into', None)
                 if merge_into:
@@ -401,6 +403,8 @@ def get_client():
                         all_maps[map_name] = c_map
                     except MapIntegrityError as e:
                         log.error("Skipping map %s because of integrity error: %s", map_name, e.message)
+                        if raise_map_errors:
+                            raise e
         for map_name, merge_contents in six.iteritems(merge_maps):
             merge_into_map = all_maps.get(map_name)
             for merge_content in merge_contents:
