@@ -929,7 +929,7 @@ def pull_latest_images(map_name=None, map_names=None, utility_images=True, insec
         _pull(policy.core_image)
     if names:
         for map_name in names:
-            c_map = m.maps[map_name]
+            c_map = m.maps[map_name].get_extended_map()
             for c_name, config in c_map:
                 image_name = policy.iname(c_map, config.image or c_name)
                 _pull(image_name)
