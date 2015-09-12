@@ -401,3 +401,10 @@ def logged_in(name, username=None, password=None, email=None, reauth=False):
     res = __salt__['container_map.login'](name, username=username, password=password, email=email, reauth=reauth)
     res['name'] = name
     return res
+
+
+def mod_watch(name, sfun=None, **kwargs):
+    if sfun == 'updated':
+        return updated(name, **kwargs)
+
+    return dict(name=name, result=False, changes={}, comment='watch requisite is not implemented for {0}'.format(sfun))
