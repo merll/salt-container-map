@@ -269,22 +269,21 @@ def _create_client(initial_maps):
         client_constructor = SaltDockerClient
 
         def __init__(self, *args, **kwargs):
-            grains_get = __salt__['grains.get']
-            for kw, name in (('base_url', 'url'),
-                             ('timeout', 'timeout'),
-                             ('version', 'version'),
-                             ('stop_timeout', 'stop_timeout'),
-                             ('wait_timeout', 'wait_timeout')):
-                if kw not in kwargs:
+            for name in ('timeout', 'version', 'stop_timeout', 'wait_timeout'):
+                if name not in kwargs:
                     value = _get_setting('docker', name)
                     if value is not None:
-                        kwargs[kw] = value
-            if 'base_url' not in kwargs and 'DOCKER_HOST' in os.environ:
-                kwargs['base_url'] = os.environ['DOCKER_HOST']
+                        kwargs[name] = value
+            if 'base_url' not in kwargs:
+                value = _get_setting('docker', 'url')
+                if value is not None:
+                    kwargs['base_url'] = value
+                elif 'DOCKER_HOST' in os.environ:
+                    kwargs['base_url'] = os.environ['DOCKER_HOST']
             if 'domainname' not in kwargs:
                 kwargs['domainname'] = _get_setting('container_map', 'domainname')
             interfaces = {if_name: if_addresses[0]
-                          for if_name, if_addresses in six.iteritems(grains_get('ip_interfaces', {})) if if_addresses}
+                          for if_name, if_addresses in six.iteritems(__salt__['grains.get']('ip_interfaces', {})) if if_addresses}
             aliases = _get_setting('container_map', 'interface_aliases', {})
             aliased_if = {alias: interfaces.get(if_name)
                           for alias, if_name in six.iteritems(aliases)}
