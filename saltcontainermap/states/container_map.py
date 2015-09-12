@@ -315,6 +315,25 @@ def updated(name, instances=None, map_name=None):
     return res
 
 
+def signaled(name, instances=None, map_name=None, signal=None):
+    """
+    Sends a signal to a container. By default this is SIGKILL, but can be set to other signals, e.g. SIGHUP for
+    reloading configurations.
+
+    name
+        Container configuration name.
+    instances
+        Optional list of instance names.
+    map_name
+        Container map name.
+    signal
+        Signal name or number.
+    """
+    res = __salt__['container_map.kill'](name, instances=instances, map_name=map_name, signal=signal)
+    res.update(name=name, instances=instances, map_name=map_name)
+    return res
+
+
 def all_removed(name):
     '''
     Removes all containers from the host. Note this also applies to containers that are not on any map.

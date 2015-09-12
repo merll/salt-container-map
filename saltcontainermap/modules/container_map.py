@@ -35,6 +35,7 @@ CONTAINER_RUNNING = 'running'
 CONTAINER_RESTARTED = 'restarted'
 CONTAINER_STOPPED = 'stopped'
 CONTAINER_UPDATED = 'updated'
+CONTAINER_SIGNALED = 'signaled'
 IMAGE_ABSENT = 'missing'
 IMAGE_PRESENT = 'present'
 IMAGE_UPDATED = 'updated'
@@ -176,6 +177,12 @@ def _create_client(initial_maps):
                 self._update_attempt(TYPE_CONTAINER, container, CONTAINER_PRESENT, CONTAINER_ABSENT)
                 super(SaltDockerClient, self).remove_container(container, *args, **kwargs)
             self._update_status(TYPE_CONTAINER, container, CONTAINER_PRESENT, CONTAINER_ABSENT)
+
+        def kill(self, container, *args, **kwargs):
+            if not __opts__['test']:
+                self._update_attempt(TYPE_CONTAINER, container, CONTAINER_PRESENT, CONTAINER_SIGNALED)
+                super(SaltDockerClient, self).kill(container, *args, **kwargs)
+            self._update_status(TYPE_CONTAINER, container, CONTAINER_PRESENT, CONTAINER_SIGNALED)
 
         def images(self, **kwargs):
             image_list = super(SaltDockerClient, self).images(**kwargs)
@@ -683,6 +690,31 @@ def update(container, instances=None, map_name=None):
     except SUMMARY_EXCEPTIONS as e:
         return _status(m.default_client, exception=e)
     return _status(m.default_client, item_id=container)
+
+
+def kill(container, instances=None, map_name=None, signal=None):
+    container_name, container_map = _split_map_name(container, map_name)
+    m = get_client()
+    c = m.default_client
+    policy = m.get_policy()
+    errors = {}
+    signal_str = signal or 'SIGKILL'
+    for instance_name in instances or [None]:
+        ci_name = policy.cname(container_map, container_name, instance_name)
+        try:
+            c.kill(ci_name, signal=signal)
+        except SUMMARY_EXCEPTIONS as e:
+            error_message = ''.join(traceback.format_exception_only(type(e), e))
+            errors[ci_name] = error_message
+    status = c.flush_changes()
+    if errors:
+        if status:
+            comment = "Failed to send signal {0} to all containers.".format(signal_str)
+        else:
+            comment = "Failed to send signal {0} to some containers.".format(signal_str)
+        return dict(result=False, item_id=container, changes=status, comment=comment, out=errors)
+    return dict(result=True, item_id=container, changes=status,
+                comment="Signal {0} sent to selected containers.".format(signal_str), out=None)
 
 
 def cleanup_containers(include_initial=False, exclude=None):
