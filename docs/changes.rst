@@ -3,6 +3,11 @@
 Change History
 ==============
 
+0.1.3
+-----
+* Added ``signaled`` state.
+* Fixed image update for extended configurations.
+
 0.1.2
 -----
 * More sensitive error handling.
