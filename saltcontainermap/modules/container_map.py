@@ -904,10 +904,9 @@ def pull_latest_images(map_name=None, map_names=None, utility_images=True, insec
         except SUMMARY_EXCEPTIONS as e:
             error_message = ''.join(traceback.format_exception_only(type(e), e))
             errors[i_name] = error_message
-        else:
-            status[i_name] = "Image updated."
 
     m = get_client()
+    c = m.default_client
     if map_names:
         names = map_names[:]
         if map_name:
@@ -921,7 +920,6 @@ def pull_latest_images(map_name=None, map_names=None, utility_images=True, insec
         names = None
     policy = m.get_policy()
     images = policy.images[m.default_client_name]
-    status = {}
     errors = {}
     if utility_images:
         _pull(policy.base_image)
@@ -932,6 +930,7 @@ def pull_latest_images(map_name=None, map_names=None, utility_images=True, insec
             for c_name, config in c_map:
                 image_name = policy.iname(c_map, config.image or c_name)
                 _pull(image_name)
+    status = c.flush_changes()
     if errors:
         if status:
             comment = "At least one image failed to update."
