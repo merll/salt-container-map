@@ -253,6 +253,10 @@ def _create_client(initial_maps):
             self._update_status(TYPE_IMAGE, image, IMAGE_PRESENT, IMAGE_ABSENT)
             return res
 
+        def run_cmd(self, cmd):
+            if not __opts__['test']:
+                __salt__['cmd.run'](cmd)
+
         def flush_changes(self):
             """
             Returns the changed items and clears the change log.
