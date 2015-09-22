@@ -669,7 +669,7 @@ def shutdown(container, instances=None, map_name=None):
     return _status(m.default_client, item_id=container)
 
 
-def update(container, instances=None, map_name=None):
+def update(container, instances=None, map_name=None, reload_signal=None):
     '''
     Ensures that a container is up-to-date, i.e.
     * the image id corresponds with the image tag from the configuration
@@ -686,14 +686,39 @@ def update(container, instances=None, map_name=None):
         Optional list of instance names.
     map_name
         Container map name.
+    reload_signal
+        Optional signal to send to the main process in case the container has not just been created.
     '''
     container_name, container_map = _split_map_name(container, map_name)
     m = get_client()
+    c = m.default_client
+    policy = m.get_policy()
+    names = set(policy.cname(container_map, container_name, instance) for instance in instances or [None])
     try:
         m.update(container_name, instances=instances, map_name=container_map)
     except SUMMARY_EXCEPTIONS as e:
-        return _status(m.default_client, exception=e)
-    return _status(m.default_client, item_id=container)
+        return _status(c, exception=e)
+    res = _status(c, item_id=container)
+    if reload_signal:
+        changed = set(res['changes'].keys())
+        errors = {}
+        for ci_name in names - changed:
+            try:
+                c.kill(ci_name, signal=reload_signal)
+            except SUMMARY_EXCEPTIONS as e:
+                error_message = ''.join(traceback.format_exception_only(type(e), e))
+                errors[ci_name] = error_message
+        signal_status = c.flush_changes()
+        if errors:
+            if signal_status:
+                comment = "Failed to send signal {0} to some containers.".format(reload_signal)
+            else:
+                comment = "Failed to send signal {0} to all containers.".format(reload_signal)
+            res.update(result=False, comment=comment, out=errors)
+        else:
+            res['changes'].update(signal_status)
+            res['comment'] = "Signal {0} sent to selected containers.".format(reload_signal)
+    return res
 
 
 def kill(container, instances=None, map_name=None, signal=None):
@@ -713,9 +738,9 @@ def kill(container, instances=None, map_name=None, signal=None):
     status = c.flush_changes()
     if errors:
         if status:
-            comment = "Failed to send signal {0} to all containers.".format(signal_str)
-        else:
             comment = "Failed to send signal {0} to some containers.".format(signal_str)
+        else:
+            comment = "Failed to send signal {0} to all containers.".format(signal_str)
         return dict(result=False, item_id=container, changes=status, comment=comment, out=errors)
     return dict(result=True, item_id=container, changes=status,
                 comment="Signal {0} sent to selected containers.".format(signal_str), out=None)
@@ -906,6 +931,7 @@ def script(container, instance=None, map_name=None, wait_timeout=10, autoremove_
                                entrypoint=entrypoint, command_format=command_format, wait_timeout=wait_timeout,
                                container_script_dir=container_script_dir, timestamps=timestamps, tail=tail)
             out = res.get(client_name) if res else None
+            return _status(m.default_client, item_id=container, output=out)
         except SUMMARY_EXCEPTIONS as e:
             return _status(m.default_client, exception=e)
     finally:
@@ -918,7 +944,6 @@ def script(container, instance=None, map_name=None, wait_timeout=10, autoremove_
                 os.unlink(script_path)
             except OSError:
                 pass
-    return _status(m.default_client, item_id=container, output=out)
 
 
 def pull_latest_images(map_name=None, map_names=None, utility_images=True, insecure_registry=False):

@@ -292,7 +292,7 @@ def shut_down(name, instances=None, map_name=None):
     return res
 
 
-def updated(name, instances=None, map_name=None):
+def updated(name, instances=None, map_name=None, reload_signal=None, send_signal=False, **kwargs):
     '''
     Ensures that a container is up-to-date, i.e.
     * the image id corresponds with the image tag from the configuration
@@ -309,8 +309,16 @@ def updated(name, instances=None, map_name=None):
         Optional list of instance names.
     map_name
         Container map name.
+    reload_signal
+        Optional signal to send to the main process for reloading.
+    send_signal : False
+        Whether to send the ``reload_signal``. Set to ``True`` by the ``watch`` directive.
     '''
-    res = __salt__['container_map.update'](name, instances=instances, map_name=map_name)
+    if send_signal:
+        signal = reload_signal
+    else:
+        signal = None
+    res = __salt__['container_map.update'](name, instances=instances, map_name=map_name, reload_signal=signal)
     res.update(name=name, instances=instances, map_name=map_name)
     return res
 
@@ -424,6 +432,7 @@ def logged_in(name, username=None, password=None, email=None, reauth=False):
 
 def mod_watch(name, sfun=None, **kwargs):
     if sfun == 'updated':
+        kwargs['send_signal'] = True
         return updated(name, **kwargs)
 
     return dict(name=name, result=False, changes={}, comment='watch requisite is not implemented for {0}'.format(sfun))
