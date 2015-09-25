@@ -3,6 +3,10 @@
 Change History
 ==============
 
+0.1.4
+-----
+* Improved behavior of watch directive on ``updated`` state.
+
 0.1.3
 -----
 * Added ``signaled`` state.

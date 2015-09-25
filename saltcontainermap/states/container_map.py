@@ -93,6 +93,19 @@ as necessary.
       container_map.updated: []
 
 
+:meth:`updated` also accepts a parameter ``reload_signal``. This is only used in conjunction with a ``watch`` directive,
+if the container was not restarted, i.e. likely just need to load its configuration. A useful value in this case is
+typically ``SIGHUP``.
+
+.. code-block:: yaml
+
+    webapp.web_server:
+      container_map.updated:
+      - reload_signal: SIGHUP
+      - watch:
+        - file: webapp_config
+
+
 For a full description of `Docker-Map <https://github.com/merll/docker-map>`_, please refer to
 `its documentation <http://docker-map.readthedocs.org/en/latest/>`_.
 '''
