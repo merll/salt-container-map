@@ -23,6 +23,7 @@ from dockermap.map.container import MapIntegrityError
 from msgpack import ExtType
 from salt.exceptions import SaltInvocationError
 from salt.ext import six
+from salt.utils import clean_kwargs
 
 VIRTUAL_NAME = 'container_map'
 
@@ -533,7 +534,7 @@ def create(container, instances=None, map_name=None, **kwargs):
     container_name, container_map = _split_map_name(container, map_name)
     m = get_client()
     try:
-        m.create(container_name, instances=instances, map_name=container_map, **kwargs)
+        m.create(container_name, instances=instances, map_name=container_map, **clean_kwargs(**kwargs))
     except SUMMARY_EXCEPTIONS as e:
         return _status(m.default_client, exception=e)
     return _status(m.default_client, item_id=container)
@@ -578,7 +579,7 @@ def stop(container, instances=None, map_name=None, **kwargs):
     container_name, container_map = _split_map_name(container, map_name)
     m = get_client()
     try:
-        m.stop(container_name, instances=instances, map_name=container_map, **kwargs)
+        m.stop(container_name, instances=instances, map_name=container_map, **clean_kwargs(**kwargs))
     except SUMMARY_EXCEPTIONS as e:
         return _status(m.default_client, exception=e)
     return _status(m.default_client, item_id=container)
@@ -601,7 +602,7 @@ def remove(container, instances=None, map_name=None, **kwargs):
     container_name, container_map = _split_map_name(container, map_name)
     m = get_client()
     try:
-        m.remove(container_name, instances=instances, map_name=container_map, **kwargs)
+        m.remove(container_name, instances=instances, map_name=container_map, **clean_kwargs(**kwargs))
     except SUMMARY_EXCEPTIONS as e:
         return _status(m.default_client, exception=e)
     return _status(m.default_client, item_id=container)
@@ -623,7 +624,7 @@ def restart(container, instances=None, map_name=None, **kwargs):
     container_name, container_map = _split_map_name(container, map_name)
     m = get_client()
     try:
-        m.restart(container_name, instances=instances, map_name=container_map, **kwargs)
+        m.restart(container_name, instances=instances, map_name=container_map, **clean_kwargs(**kwargs))
     except SUMMARY_EXCEPTIONS as e:
         return _status(m.default_client, exception=e)
     return _status(m.default_client, item_id=container)
@@ -810,7 +811,7 @@ def call(action_name, container, instances=None, map_name=None, **kwargs):
     container_name, container_map = _split_map_name(container, map_name)
     m = get_client()
     try:
-        m.call(action_name, container_name, instances=instances, map_name=container_map, **kwargs)
+        m.call(action_name, container_name, instances=instances, map_name=container_map, **clean_kwargs(**kwargs))
     except SUMMARY_EXCEPTIONS as e:
         return _status(m.default_client, exception=e)
     return _status(m.default_client, item_id=container)
@@ -1033,7 +1034,8 @@ def login(registry, username=None, password=None, email=None, reauth=False, **kw
     '''
     client = get_client().default_client
     try:
-        result = client.login(username, password, email, registry=registry, reauth=reauth, **kwargs)
+        result = client.login(username, password, email, registry=registry, reauth=reauth,
+                              **clean_kwargs(**kwargs))
     except SUMMARY_EXCEPTIONS as e:
         error_message = ''.join(traceback.format_exception_only(type(e), e))
         return dict(result=False, item_id=registry, changes={}, comment=error_message, out=None)
