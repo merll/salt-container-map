@@ -29,6 +29,7 @@ VIRTUAL_NAME = 'container_map'
 
 TYPE_CONTAINER = 'container'
 TYPE_IMAGE = 'image'
+TYPE_EXEC = 'command'
 
 CONTAINER_ABSENT = 'absent'
 CONTAINER_PRESENT = 'present'
@@ -40,6 +41,9 @@ CONTAINER_SIGNALED = 'signaled'
 IMAGE_ABSENT = 'missing'
 IMAGE_PRESENT = 'present'
 IMAGE_UPDATED = 'updated'
+EXEC_ABSENT = 'absent'
+EXEC_CREATED = 'created'
+EXEC_STARTED = 'started'
 
 UPDATED_STATES = (CONTAINER_RUNNING, CONTAINER_PRESENT)
 SUMMARY_EXCEPTIONS = (KeyError, ValueError, APIError, DockerException, MapIntegrityError)
@@ -184,6 +188,21 @@ def _create_client(initial_maps):
                 self._update_attempt(TYPE_CONTAINER, container, CONTAINER_PRESENT, CONTAINER_SIGNALED)
                 super(SaltDockerClient, self).kill(container, *args, **kwargs)
             self._update_status(TYPE_CONTAINER, container, CONTAINER_PRESENT, CONTAINER_SIGNALED)
+
+        def exec_create(self, container, cmd, *args, **kwargs):
+            if not __opts__['test']:
+                self._update_attempt(TYPE_EXEC, '{0} - {1}'.format(container, cmd), EXEC_ABSENT, EXEC_CREATED)
+                exec_info = super(SaltDockerClient, self).exec_create(container, cmd, *args, **kwargs)
+            else:
+                exec_info = {'Id': 0}
+            self._update_status(TYPE_EXEC, exec_info['Id'], EXEC_ABSENT, EXEC_STARTED)
+            return exec_info
+
+        def exec_start(self, exec_id, *args, **kwargs):
+            if not __opts__['test'] and exec_id:
+                self._update_attempt(TYPE_EXEC, exec_id, EXEC_CREATED, EXEC_STARTED)
+                super(SaltDockerClient, self).exec_start(exec_id, *args, **kwargs)
+            self._update_status(TYPE_EXEC, exec_id, EXEC_CREATED, EXEC_STARTED)
 
         def images(self, **kwargs):
             image_list = super(SaltDockerClient, self).images(**kwargs)
