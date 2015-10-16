@@ -3,6 +3,11 @@
 Change History
 ==============
 
+0.1.5
+-----
+* Added wrapper for ``exec_create`` and ``exec_start`` for tracking post-container-start commands.
+* Removed extra keyword arguments attached by Salt.
+
 0.1.4
 -----
 * Improved behavior of watch directive on ``updated`` state.
