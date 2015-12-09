@@ -414,6 +414,7 @@ def get_client():
     if map_dicts:
         log.info("Initializing container maps: %s", ', '.join(map_dicts.keys()))
         merge_maps = defaultdict(list)
+        copy_maps = []
         for map_name, map_content in six.iteritems(map_dicts):
             try:
                 resolved_content = resolve_deep(map_content, types=resolve_dict)
@@ -424,12 +425,15 @@ def get_client():
                     six.reraise(*exc_info)
             else:
                 merge_into = resolved_content.pop('merge_into', None)
+                copy = resolved_content.pop('extend_copy', None)
                 if merge_into:
                     merge_maps[merge_into].append(resolved_content)
+                elif copy:
+                    copy_maps.append((map_name, copy, resolved_content))
                 else:
                     check_integrity = not resolved_content.pop('skip_check', skip_checks)
+                    a_p_name = resolved_content.pop('use_attached_parent_name', attached_parent_name)
                     try:
-                        a_p_name = resolved_content.pop('use_attached_parent_name', attached_parent_name)
                         c_map = ContainerMap(map_name, resolved_content, check_integrity=check_integrity,
                                              use_attached_parent_name=a_p_name)
                         all_maps[map_name] = c_map
@@ -440,11 +444,30 @@ def get_client():
                             six.reraise(*exc_info)
         for map_name, merge_contents in six.iteritems(merge_maps):
             merge_into_map = all_maps.get(map_name)
-            for merge_content in merge_contents:
-                if merge_into_map:
+            if merge_into_map:
+                for merge_content in merge_contents:
                     merge_into_map.merge(merge_content, lists_only=merge_content.pop('merge_lists_only', False))
-                else:
-                    log.error("Map %s is not available for merging into: %s", merge_into_map, map_name)
+            else:
+                log.error("Map %s is not available for merging into: %s", merge_into_map, map_name)
+        for map_name, extend_name, merge_content in copy_maps:
+            copy_from_map = all_maps.get(extend_name)
+            if copy_from_map:
+                check_integrity = not merge_content.pop('skip_check', skip_checks)
+                a_p_name = merge_content.pop('use_attached_parent_name', attached_parent_name)
+                new_map = ContainerMap(map_name, copy_from_map, check_integrity=False,
+                                       use_attached_parent_name=a_p_name)
+                new_map.merge(merge_content, lists_only=merge_content.pop('merge_lists_only', False))
+                if check_integrity:
+                    try:
+                        new_map.check_integrity()
+                    except MapIntegrityError as e:
+                        exc_info = sys.exc_info()
+                        log.error("Skipping map %s because of integrity error: %s", map_name, e.message)
+                        if raise_map_errors:
+                            six.reraise(*exc_info)
+                all_maps[map_name] = new_map
+            else:
+                log.error("Map %s is not available for extension: %s", extend_name, map_name)
 
     return _create_client(all_maps)
 
