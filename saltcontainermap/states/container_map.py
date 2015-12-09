@@ -76,6 +76,19 @@ For merging a pillar into an existing one, use ``merge_into``, e.g.
         containers:
           ...
 
+During the pillar set up, maps can also copied and extended from others using ``extend_copy``, so that per-application
+adaptions are possible. For example
+
+.. code-block: yaml
+
+    container_map:
+      webapp_custom:
+        extend_copy: webapp
+        containers:
+         ...
+
+will create a map ``webapp_custom`` that includes all containers from ``webapp``. It also contains all contents that
+have been merged into ``webapp``, as ``merge_into`` on extended maps is processed beforehand.
 
 As an alternative to the pillar setup, ``set_up`` / ``merged`` can be used to add container configurations, but these
 need to be set as a prerequisite to any action.
