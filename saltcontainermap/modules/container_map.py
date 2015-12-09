@@ -15,6 +15,7 @@ import os
 import shutil
 import tempfile
 import traceback
+import sys
 
 from docker.errors import APIError, DockerException
 from dockermap.functional import expand_type_name, resolve_deep
@@ -417,9 +418,10 @@ def get_client():
             try:
                 resolved_content = resolve_deep(map_content, types=resolve_dict)
             except KeyError as e:
+                exc_info = sys.exc_info()
                 log.error("Skipping map %s due to error: %s", map_name, e.args[0])
                 if raise_map_errors:
-                    raise e
+                    six.reraise(*exc_info)
             else:
                 merge_into = resolved_content.pop('merge_into', None)
                 if merge_into:
@@ -432,9 +434,10 @@ def get_client():
                                              use_attached_parent_name=a_p_name)
                         all_maps[map_name] = c_map
                     except MapIntegrityError as e:
+                        exc_info = sys.exc_info()
                         log.error("Skipping map %s because of integrity error: %s", map_name, e.message)
                         if raise_map_errors:
-                            raise e
+                            six.reraise(*exc_info)
         for map_name, merge_contents in six.iteritems(merge_maps):
             merge_into_map = all_maps.get(map_name)
             for merge_content in merge_contents:
