@@ -321,6 +321,7 @@ def _create_client(initial_maps):
                           for alias, if_name in six.iteritems(aliases)}
             interfaces.update(aliased_if)
             kwargs['interfaces'] = interfaces
+            log.debug("Creating client config: %s", kwargs)
             super(SaltDockerClientConfig, self).__init__(*args, **kwargs)
 
     class SaltDockerMap(MappingDockerClient):
@@ -826,13 +827,17 @@ def cleanup_images(remove_old=False):
     return _status(c)
 
 
-def remove_all_containers():
+def remove_all_containers(stop_timeout=None):
     '''
     Removes all containers from the host.
+
+    stop_timeout
+        Timeout to stop containers before they are removed.
     '''
+    stop_timeout = stop_timeout or _get_setting('docker', 'stop_timeout', 10)
     c = get_client().default_client
     try:
-        c.remove_all_containers()
+        c.remove_all_containers(stop_timeout=stop_timeout)
     except SUMMARY_EXCEPTIONS as e:
         return _status(c, exception=e)
     return _status(c)
