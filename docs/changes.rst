@@ -2,6 +2,10 @@
 
 Change History
 ==============
+0.1.6
+-----
+* Added ``extend_copy`` on map level, which allows for re-using extending maps under a different name.
+* Added ``stop_timeout`` to ``remove_all_containers`` module function, using configuration.
 
 0.1.5
 -----
