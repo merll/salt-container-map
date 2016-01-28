@@ -114,6 +114,18 @@ def _get_setting(prefix, name, default=None):
     return __salt__['config.get'](config_name, default)
 
 
+def _get_single_ip_addresses(ipv6):
+    for if_name, if_addresses in six.iteritems(__salt__['grains.get']('ip_interfaces', {})):
+        for addr in if_addresses:
+            if ':' in addr:
+                if ipv6:
+                    yield if_name, addr
+                    break
+            elif not ipv6:
+                yield if_name, addr
+                break
+
+
 def _create_client(initial_maps):
     """
     :type initial_maps: dict[unicode, ContainerMap]
@@ -314,13 +326,15 @@ def _create_client(initial_maps):
                     kwargs['base_url'] = os.environ['DOCKER_HOST']
             if 'domainname' not in kwargs:
                 kwargs['domainname'] = _get_setting('container_map', 'domainname')
-            interfaces = {if_name: if_addresses[0]
-                          for if_name, if_addresses in six.iteritems(__salt__['grains.get']('ip_interfaces', {})) if if_addresses}
+            interfaces_ipv4 = dict(_get_single_ip_addresses(False))
+            interfaces_ipv6 = dict(_get_single_ip_addresses(True))
             aliases = _get_setting('container_map', 'interface_aliases', {})
-            aliased_if = {alias: interfaces.get(if_name)
-                          for alias, if_name in six.iteritems(aliases)}
-            interfaces.update(aliased_if)
-            kwargs['interfaces'] = interfaces
+            for interfaces in (interfaces_ipv4, interfaces_ipv6):
+                aliased_if = {alias: interfaces.get(if_name)
+                              for alias, if_name in six.iteritems(aliases)}
+                interfaces.update(aliased_if)
+            kwargs['interfaces'] = interfaces_ipv4
+            kwargs['interfaces_ipv6'] = interfaces_ipv6
             log.debug("Creating client config: %s", kwargs)
             super(SaltDockerClientConfig, self).__init__(*args, **kwargs)
 
