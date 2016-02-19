@@ -1025,7 +1025,10 @@ def pull_latest_images(map_name=None, map_names=None, utility_images=True, insec
         Allow `insecure` registries for retrieving images.
     '''
     def _pull(i_name):
+        registry_name, __, image_name = i_name.rpartition('/')
         try:
+            if registry_name:
+                c.login(username=None, registry=registry_name)
             images.ensure_image(i_name, pull_latest=True, insecure_registry=insecure_registry)
         except SUMMARY_EXCEPTIONS as e:
             error_message = ''.join(traceback.format_exception_only(type(e), e))
