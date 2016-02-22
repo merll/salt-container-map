@@ -2,6 +2,11 @@
 
 Change History
 ==============
+0.1.7
+-----
+* Added registry authentication before pulling images in execution module.
+* Separated IPv6 from IPv4 addresses in the client configuration.
+
 0.1.6
 -----
 * Added ``extend_copy`` on map level, which allows for re-using extending maps under a different name.
