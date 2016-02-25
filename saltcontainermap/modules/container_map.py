@@ -582,7 +582,7 @@ def create(container, instances=None, map_name=None, **kwargs):
     '''
     Creates a container, along with its dependencies. Existing containers are not re-created.
 
-    name
+    container
         Container configuration name.
     instances
         Optional list of instance names.
@@ -605,7 +605,7 @@ def start(container, instances=None, map_name=None, **kwargs):
     Starts a container, along with its dependencies. Fails on non-existing containers, but not on containers that are
     already started.
 
-    name
+    container
         Container configuration name.
     instances
         Optional list of instance names.
@@ -617,7 +617,7 @@ def start(container, instances=None, map_name=None, **kwargs):
     container_name, container_map = _split_map_name(container, map_name)
     m = get_client()
     try:
-        m.start(container_name, instances=instances, map_name=container_map, **kwargs)
+        m.start(container_name, instances=instances, map_name=container_map, **clean_kwargs(**kwargs))
     except SUMMARY_EXCEPTIONS as e:
         return _status(m.default_client, exception=e)
     return _status(m.default_client, item_id=container)
@@ -627,7 +627,7 @@ def stop(container, instances=None, map_name=None, **kwargs):
     '''
     Stops a container, along with its dependent containers. Ignores non-existing or non-running containers.
 
-    name
+    container
         Container configuration name.
     instances
         Optional list of instance names.
@@ -650,7 +650,7 @@ def remove(container, instances=None, map_name=None, **kwargs):
     Removes a container, along with its dependent containers. Ignores non-existing containers, but fails on running
     containers.
 
-    name
+    container
         Container configuration name.
     instances
         Optional list of instance names.
@@ -672,7 +672,7 @@ def restart(container, instances=None, map_name=None, **kwargs):
     '''
     Restarts a container.
 
-    name
+    container
         Container configuration name.
     instances
         Optional list of instance names.
@@ -690,47 +690,51 @@ def restart(container, instances=None, map_name=None, **kwargs):
     return _status(m.default_client, item_id=container)
 
 
-def startup(container, instances=None, map_name=None):
+def startup(container, instances=None, map_name=None, **kwargs):
     '''
     Creates and starts a container as needed, along with its dependencies. Ignores running containers.
 
-    name
+    container
         Container configuration name.
     instances
         Optional list of instance names.
     map_name
         Container map name.
+    kwargs
+        Extra keyword arguments for the container startup.
     '''
     container_name, container_map = _split_map_name(container, map_name)
     m = get_client()
     try:
-        m.startup(container_name, instances=instances, map_name=container_map)
+        m.startup(container_name, instances=instances, map_name=container_map, **clean_kwargs(**kwargs))
     except SUMMARY_EXCEPTIONS as e:
         return _status(m.default_client, exception=e)
     return _status(m.default_client, item_id=container)
 
 
-def shutdown(container, instances=None, map_name=None):
+def shutdown(container, instances=None, map_name=None, **kwargs):
     '''
     Stops and removes a container as needed, along with its dependent containers. Ignores non-existing containers.
 
-    name
+    container
         Container configuration name.
     instances
         Optional list of instance names.
     map_name
         Container map name.
+    kwargs
+        Extra keyword arguments for the container shutdown.
     '''
     container_name, container_map = _split_map_name(container, map_name)
     m = get_client()
     try:
-        m.shutdown(container_name, instances=instances, map_name=container_map)
+        m.shutdown(container_name, instances=instances, map_name=container_map, **clean_kwargs(**kwargs))
     except SUMMARY_EXCEPTIONS as e:
         return _status(m.default_client, exception=e)
     return _status(m.default_client, item_id=container)
 
 
-def update(container, instances=None, map_name=None, reload_signal=None):
+def update(container, instances=None, map_name=None, reload_signal=None, **kwargs):
     '''
     Ensures that a container is up-to-date, i.e.
     * the image id corresponds with the image tag from the configuration
@@ -741,7 +745,7 @@ def update(container, instances=None, map_name=None, reload_signal=None):
     Non-existing containers are created and started. Outdated containers are removed and re-created and restarted along
     the dependency path.
 
-    name
+    container
         Container configuration name.
     instances
         Optional list of instance names.
@@ -749,6 +753,8 @@ def update(container, instances=None, map_name=None, reload_signal=None):
         Container map name.
     reload_signal
         Optional signal to send to the main process in case the container has not just been created.
+    kwargs
+        Extra keyword arguments for the container update.
     '''
     container_name, container_map = _split_map_name(container, map_name)
     m = get_client()
@@ -756,7 +762,7 @@ def update(container, instances=None, map_name=None, reload_signal=None):
     policy = m.get_policy()
     names = set(policy.cname(container_map, container_name, instance) for instance in instances or [None])
     try:
-        m.update(container_name, instances=instances, map_name=container_map)
+        m.update(container_name, instances=instances, map_name=container_map, **clean_kwargs(**kwargs))
     except SUMMARY_EXCEPTIONS as e:
         return _status(c, exception=e)
     res = _status(c, item_id=container)
@@ -884,7 +890,7 @@ def call(action_name, container, instances=None, map_name=None, **kwargs):
 def script(container, instance=None, map_name=None, wait_timeout=10, autoremove_before=False, autoremove_after=True,
            source=None, saltenv='base', template=None, contents=None, content_pillar=None, path=None, file_mode=None,
            dir_mode=None, user=None, group=None, entrypoint=None, command_format=None,
-           container_script_dir='/tmp/script_run', timestamps=None, tail='all'):
+           container_script_dir='/tmp/script_run', timestamps=None, tail='all', **kwargs):
     '''
     Runs a script inside a configured container. The container is specifically created for this purpose (in difference
     to the ``dockerio`` implementation, which executes in a running container). After the script is done, newly
@@ -976,7 +982,6 @@ def script(container, instance=None, map_name=None, wait_timeout=10, autoremove_
 
         container_name, container_map = _split_map_name(container, map_name)
         m = get_client()
-        client_name = m.default_client_name
         policy = m.get_policy()
         policy.remove_existing_before = autoremove_before
         policy.remove_created_after = autoremove_after
@@ -994,9 +999,9 @@ def script(container, instance=None, map_name=None, wait_timeout=10, autoremove_
             res = m.run_script(container_name, instance=instance, map_name=container_map,
                                script_path=script_path or script_dir,
                                entrypoint=entrypoint, command_format=command_format, wait_timeout=wait_timeout,
-                               container_script_dir=container_script_dir, timestamps=timestamps, tail=tail)
-            out = res.get(client_name) if res else None
-            return _status(m.default_client, item_id=container, output=out)
+                               container_script_dir=container_script_dir, timestamps=timestamps, tail=tail,
+                               **clean_kwargs(**kwargs))
+            return _status(m.default_client, item_id=container, output=res)
         except SUMMARY_EXCEPTIONS as e:
             return _status(m.default_client, exception=e)
     finally:
