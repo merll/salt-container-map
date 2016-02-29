@@ -2,6 +2,11 @@
 
 Change History
 ==============
+0.1.8
+-----
+* Skip registry authentication for prefixed images.
+* Removed more keyword arguments attached by Salt.
+
 0.1.7
 -----
 * Added registry authentication before pulling images in execution module.
