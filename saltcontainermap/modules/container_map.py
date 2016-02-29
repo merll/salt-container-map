@@ -1032,7 +1032,7 @@ def pull_latest_images(map_name=None, map_names=None, utility_images=True, insec
     def _pull(i_name):
         registry_name, __, image_name = i_name.rpartition('/')
         try:
-            if registry_name:
+            if registry_name and '.' in registry_name:
                 c.login(username=None, registry=registry_name)
             images.ensure_image(i_name, pull_latest=True, insecure_registry=insecure_registry)
         except SUMMARY_EXCEPTIONS as e:
