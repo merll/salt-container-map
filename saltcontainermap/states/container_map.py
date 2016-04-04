@@ -397,18 +397,20 @@ def containers_clean(name, include_initial=False, exclude=None):
     return res
 
 
-def images_clean(name, remove_old=False):
+def images_clean(name, remove_old=False, keep_tags=None):
     '''
     Removes all images from the host which are not in use by any container and have no tag. Optionally can also remove
-    images with a repository tag that is not ``latest``.
+    images with a repository tag that is not ``latest``, or all tags which are not in the specified whitelist.
 
     name
         State name - has no effect.
     remove_old : False
         Remove images that have a tag, but not ``latest``. Does not affect additional (e.g. version) tags of ``latest``
         images.
+    keep_tags
+        Remove images that have none of the specified tags.
     '''
-    res = __salt__['container_map.cleanup_images'](remove_old=remove_old)
+    res = __salt__['container_map.cleanup_images'](remove_old=remove_old, keep_tags=keep_tags)
     res['name'] = '__all__'
     return res
 

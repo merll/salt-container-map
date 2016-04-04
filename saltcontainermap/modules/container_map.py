@@ -830,18 +830,20 @@ def cleanup_containers(include_initial=False, exclude=None):
     return _status(c)
 
 
-def cleanup_images(remove_old=False):
+def cleanup_images(remove_old=False, keep_tags=None):
     '''
     Removes all images from the host which are not in use by any container and have no tag. Optionally can also remove
-    images with a repository tag that is not ``latest``.
+    images with a repository tag that is not the ``latest`` or any other listed tag.
 
     remove_old : False
         Remove images that have a tag, but not ``latest``. Does not affect additional (e.g. version) tags of ``latest``
         images.
+    keep_tags
+        Keep only images that have any of the specified tags.
     '''
     c = get_client().default_client
     try:
-        c.cleanup_images(remove_old=remove_old)
+        c.cleanup_images(remove_old=remove_old, keep_tags=keep_tags)
     except SUMMARY_EXCEPTIONS as e:
         return _status(c, exception=e)
     return _status(c)
@@ -1034,7 +1036,7 @@ def pull_latest_images(map_name=None, map_names=None, utility_images=True, insec
         try:
             if registry_name and '.' in registry_name:
                 c.login(username=None, registry=registry_name)
-            images.ensure_image(i_name, pull_latest=True, insecure_registry=insecure_registry)
+            images.ensure_image(i_name, pull=True, insecure_registry=insecure_registry)
         except SUMMARY_EXCEPTIONS as e:
             error_message = ''.join(traceback.format_exception_only(type(e), e))
             errors[i_name] = error_message
@@ -1062,7 +1064,7 @@ def pull_latest_images(map_name=None, map_names=None, utility_images=True, insec
         for map_name in names:
             c_map = m.maps[map_name].get_extended_map()
             for c_name, config in c_map:
-                image_name = policy.iname(c_map, config.image or c_name)
+                image_name = policy.image_name(config.image or c_name, c_map)
                 _pull(image_name)
     status = c.flush_changes()
     if errors:
