@@ -2,6 +2,11 @@
 
 Change History
 ==============
+0.1.9b1
+-------
+* Added tag whitelist to ``cleanup_images`` module method and ``images_clean`` state.
+* Adapted to changes in Docker-Map 0.6.6b1.
+
 0.1.8
 -----
 * Skip registry authentication for prefixed images.
