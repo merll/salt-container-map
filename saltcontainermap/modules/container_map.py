@@ -1031,16 +1031,6 @@ def pull_latest_images(map_name=None, map_names=None, utility_images=True, insec
     insecure_registry : False
         Allow `insecure` registries for retrieving images.
     '''
-    def _pull(i_name):
-        registry_name, __, image_name = i_name.rpartition('/')
-        try:
-            if registry_name and '.' in registry_name:
-                c.login(username=None, registry=registry_name)
-            images.ensure_image(i_name, pull=True, insecure_registry=insecure_registry)
-        except SUMMARY_EXCEPTIONS as e:
-            error_message = ''.join(traceback.format_exception_only(type(e), e))
-            errors[i_name] = error_message
-
     m = get_client()
     c = m.default_client
     if map_names:
@@ -1058,14 +1048,24 @@ def pull_latest_images(map_name=None, map_names=None, utility_images=True, insec
     images = policy.images[m.default_client_name]
     errors = {}
     if utility_images:
-        _pull(policy.base_image)
-        _pull(policy.core_image)
+        pull_images = {policy.base_image, policy.core_image}
+    else:
+        pull_images = set()
     if names:
         for map_name in names:
             c_map = m.maps[map_name].get_extended_map()
-            for c_name, config in c_map:
-                image_name = policy.image_name(config.image or c_name, c_map)
-                _pull(image_name)
+            pull_images.update(policy.image_name(config.image or c_name, c_map)
+                               for c_name, config in c_map)
+    for i_name in pull_images:
+        registry_name, __, image_name = i_name.rpartition('/')
+        try:
+            if registry_name and '.' in registry_name:
+                c.login(username=None, registry=registry_name)
+            images.ensure_image(i_name, pull=True, insecure_registry=insecure_registry)
+        except SUMMARY_EXCEPTIONS as e:
+            error_message = ''.join(traceback.format_exception_only(type(e), e))
+            errors[i_name] = error_message
+
     status = c.flush_changes()
     if errors:
         if status:
