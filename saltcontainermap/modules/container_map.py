@@ -19,7 +19,7 @@ import sys
 
 from docker.errors import APIError, DockerException
 from dockermap.functional import expand_type_name, resolve_deep
-from dockermap.api import ClientConfiguration, ContainerMap, DockerClientWrapper, MappingDockerClient
+from dockermap.api import DockerClientWrapper, ClientConfiguration, ContainerMap, MappingDockerClient
 from dockermap.map.container import MapIntegrityError
 from msgpack import ExtType
 from salt.exceptions import SaltInvocationError
