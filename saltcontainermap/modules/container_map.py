@@ -349,6 +349,12 @@ def _create_client(initial_maps):
             default_name = self.policy_class.get_default_client_name()
             self._default_client_name = default_name
             self._default_config = self.clients[default_name]
+            base_image = _get_setting('container_map', 'base_image')
+            if base_image:
+                self.policy_class.base_image = base_image
+            core_image = _get_setting('container_map', 'core_image')
+            if core_image:
+                self.policy_class.core_image = core_image
 
         @property
         def default_client_name(self):
