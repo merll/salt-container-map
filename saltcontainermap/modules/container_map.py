@@ -21,7 +21,6 @@ from docker.errors import APIError, DockerException
 from dockermap.functional import expand_type_name, resolve_deep
 from dockermap.api import DockerClientWrapper, ClientConfiguration, ContainerMap, MappingDockerClient
 from dockermap.map.container import MapIntegrityError
-from msgpack import ExtType
 from salt.exceptions import SaltInvocationError
 from salt.ext import six
 from salt.utils import clean_kwargs
@@ -50,6 +49,15 @@ UPDATED_STATES = (CONTAINER_RUNNING, CONTAINER_PRESENT)
 SUMMARY_EXCEPTIONS = (KeyError, ValueError, APIError, DockerException, MapIntegrityError)
 
 log = logging.getLogger(__name__)
+
+try:
+    from msgpack import ExtType
+    use_ext_type = True
+except ImportError:
+    log.warning("Failed to import 'ExtType', probably due to an outdated msgpack library. Please install a more recent "
+                "version in order to work with pillar and grain values in templates.")
+    ExtType = None
+    use_ext_type = False
 
 
 def __virtual__():
@@ -421,10 +429,13 @@ def get_client():
         return client
 
     config_get = __salt__['config.get']
-    log.debug("Configuring ExtType.")
-    ext_resolver = _get_resolver(config_get('lazy_yaml.ext_code_pillar', 10),
-                                 config_get('lazy_yaml.ext_code_grain', 11))
-    resolve_dict = {expand_type_name(ExtType): ext_resolver.get}
+    if use_ext_type:
+        log.debug("Configuring ExtType.")
+        ext_resolver = _get_resolver(config_get('lazy_yaml.ext_code_pillar', 10),
+                                     config_get('lazy_yaml.ext_code_grain', 11))
+        resolve_dict = {expand_type_name(ExtType): ext_resolver.get}
+    else:
+        resolve_dict = {}
     log.debug("Loading container maps.")
     pillar_name = config_get('container_map.pillar_name', 'container_maps')
     map_dicts = __salt__['pillar.get'](pillar_name, {})
