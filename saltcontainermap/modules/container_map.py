@@ -866,16 +866,65 @@ def cleanup_images(remove_old=False, keep_tags=None):
     return _status(c)
 
 
-def remove_all_containers(stop_timeout=None):
+def remove_all_containers(stop_timeout=None, shutdown_maps='__all__', shutdown_first=None):
     '''
     Removes all containers from the host.
 
     stop_timeout
-        Timeout to stop containers before they are removed.
+        Timeout to stop containers before they are removed. Only applies to containers that do not have this set
+        in the configuration, unless ``shutdown_maps`` is set to ``None`` and ``shutdown_first`` is not set.
+    shutdown_maps
+        List of maps to go over all container configurations and shut down properly prior to simply stopping and
+        removing everything there is on the host.
+    shutdown_first
+        List of container configurations to shut down first, even before ``shutdown_maps``. Any configuration that
+        is not valid on the host is ignored.
     '''
     stop_timeout = stop_timeout or _get_setting('docker', 'stop_timeout', 10)
-    c = get_client().default_client
+    m = get_client()
+    ext_cache = {}
+
+    def _get_ext_map(name, cn_map=None):
+        ext_map = ext_cache.get(name)
+        if not ext_map:
+            if not cn_map:
+                cn_map = m.maps.get(name)
+            ext_map = cn_map.get_extended_map()
+            ext_cache[name] = ext_map
+        return name, ext_map
+
+    if shutdown_first:
+        if isinstance(shutdown_first, (tuple, list)):
+            sf_list = shutdown_first
+        else:
+            sf_list = [shutdown_first]
+    else:
+        sf_list = []
+    if shutdown_maps:
+        if shutdown_maps == '__all__':
+            sd_maps = [_get_ext_map(map_name, container_map)
+                       for map_name, container_map in six.iteritems(m.maps)]
+        elif isinstance(shutdown_maps, (tuple, list)):
+            sd_maps = [_get_ext_map(map_name) for map_name in shutdown_maps]
+        else:
+            sd_maps = [_get_ext_map(shutdown_maps)]
+    else:
+        sd_maps = []
+    c = m.default_client
     try:
+        for sf in sf_list:
+            map_name, __, config_instance = sf.partition('.')
+            if not all((map_name, config_instance)):
+                raise SaltInvocationError("Items of 'shutdown_first' must be in the format "
+                                          "'<map name>.<container config>', optionally followed by "
+                                          "'<instance name>.")
+            config_name, __, instance_name = config_instance.partition('.')
+            c_map = _get_ext_map(map_name)[1]
+            if c_map and config_name in c_map.containers:
+                m.shutdown(config_name, instances=[instance_name], map_name=map_name)
+        for map_name, container_map in sd_maps:
+            for config_name in container_map.containers:
+                m.shutdown(config_name, map_name=map_name)
         c.remove_all_containers(stop_timeout=stop_timeout)
     except SUMMARY_EXCEPTIONS as e:
         return _status(c, exception=e)

@@ -124,6 +124,8 @@ For a full description of `Docker-Map <https://github.com/merll/docker-map>`_, p
 '''
 from __future__ import unicode_literals
 
+from salt.utils import clean_kwargs
+
 
 def set_up(name, containers=None, volumes=None, host=None, host_root=None, repository=None, default_domain=None,
            check_integrity=True, ignore_existing=False):
@@ -368,14 +370,16 @@ def signaled(name, instances=None, map_name=None, signal=None):
     return res
 
 
-def all_removed(name):
+def all_removed(name, **kwargs):
     '''
     Removes all containers from the host. Note this also applies to containers that are not on any map.
 
     name
         State name - has no effect.
+    kwargs
+        Keyword arguments forwarded to ``container_map.remove_all_containers``.
     '''
-    res = __salt__['container_map.remove_all_containers']()
+    res = __salt__['container_map.remove_all_containers'](**clean_kwargs(**kwargs))
     res['name'] = '__all__'
     return res
 
