@@ -884,14 +884,13 @@ def remove_all_containers(stop_timeout=None, shutdown_maps='__all__', shutdown_f
     m = get_client()
     ext_cache = {}
 
-    def _get_ext_map(name, cn_map=None):
+    def _get_ext_map(name, base_map=None):
         ext_map = ext_cache.get(name)
         if not ext_map:
-            if not cn_map:
-                cn_map = m.maps.get(name)
-            ext_map = cn_map.get_extended_map()
-            ext_cache[name] = ext_map
-        return name, ext_map
+            if not base_map:
+                base_map = m.maps.get(name)
+            ext_cache[name] = ext_map = base_map.get_extended_map()
+        return ext_map
 
     if shutdown_first:
         if isinstance(shutdown_first, (tuple, list)):
@@ -919,12 +918,12 @@ def remove_all_containers(stop_timeout=None, shutdown_maps='__all__', shutdown_f
                                           "'<map name>.<container config>', optionally followed by "
                                           "'<instance name>.")
             config_name, __, instance_name = config_instance.partition('.')
-            c_map = _get_ext_map(map_name)[1]
+            c_map = _get_ext_map(map_name)
             if c_map and config_name in c_map.containers:
                 m.shutdown(config_name, instances=[instance_name], map_name=map_name)
-        for map_name, container_map in sd_maps:
+        for container_map in sd_maps:
             for config_name in container_map.containers:
-                m.shutdown(config_name, map_name=map_name)
+                m.shutdown(config_name, map_name=container_map.name)
         c.remove_all_containers(stop_timeout=stop_timeout)
     except SUMMARY_EXCEPTIONS as e:
         return _status(c, exception=e)
