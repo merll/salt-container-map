@@ -64,32 +64,28 @@ def __virtual__():
     return VIRTUAL_NAME
 
 
-def _get_resolver(pillar, grain):
+def _get_resolver(code_pillar, code_grain):
     class ValueNotFound(object):
         pass
 
-    class ExtTypeResolver(object):
-        def __init__(self, ext_type_pillar, ext_type_grain):
-            self._code_pillar = ext_type_pillar
-            self._code_grain = ext_type_grain
-            self._get_pillar = __salt__['pillar.get']
-            self._get_grain = __salt__['grains.get']
+    get_pillar = __salt__['pillar.get']
+    get_grain = __salt__['grains.get']
 
-        def get(self, ext_data):
-            code = ext_data.code
-            if code == self._code_pillar:
-                value = self._get_pillar(ext_data.data, ValueNotFound)
-                if value is ValueNotFound:
-                    raise KeyError("No pillar value '{0}' found.".format(ext_data.data))
-                return value
-            elif code == self._code_grain:
-                value = self._get_grain(ext_data.data, ValueNotFound)
-                if value is ValueNotFound:
-                    raise KeyError("No grain value '{0}' found.".format(ext_data.data))
-                return value
-            return ext_data
+    def _resolve(ext_data):
+        code = ext_data.code
+        if code == code_pillar:
+            value = get_pillar(ext_data.data, ValueNotFound)
+            if value is ValueNotFound:
+                raise KeyError("No pillar value '{0}' found.".format(ext_data.data))
+            return value
+        elif code == code_grain:
+            value = get_grain(ext_data.data, ValueNotFound)
+            if value is ValueNotFound:
+                raise KeyError("No grain value '{0}' found.".format(ext_data.data))
+            return value
+        return ext_data
 
-    return ExtTypeResolver(pillar, grain)
+    return _resolve
 
 
 def _split_map_name(name, map_name):
@@ -433,7 +429,7 @@ def get_client():
         log.debug("Configuring ExtType.")
         ext_resolver = _get_resolver(config_get('lazy_yaml.ext_code_pillar', 10),
                                      config_get('lazy_yaml.ext_code_grain', 11))
-        resolve_dict = {expand_type_name(ExtType): ext_resolver.get}
+        resolve_dict = {expand_type_name(ExtType): ext_resolver}
     else:
         resolve_dict = {}
     log.debug("Loading container maps.")
