@@ -1015,9 +1015,10 @@ def script(container, instance=None, map_name=None, wait_timeout=10, autoremove_
     script_path = None
     try:
         if source:
-            f, script_path = tempfile.mkstemp(dir=path)
-            log.debug("Copying script to temporary file %s.", script_path)
+            f = tempfile.NamedTemporaryFile(dir=path, delete=False)
+            script_path = f.name
             f.close()
+            log.debug("Copying script to temporary file %s.", script_path)
             if template:
                 __salt__['cp.get_template'](source, script_path, template=template, saltenv=saltenv)
             else:
