@@ -249,10 +249,9 @@ def _create_client(initial_maps):
             return super(SaltDockerClient, self).login(username, password, email, registry, **kwargs)
 
         def pull(self, repository, tag=None, *args, **kwargs):
-            if self._state_images is None:
-                self.images()
+            state_images = self.get_state_images()
             full_image = '{0}:{1}'.format(repository, tag or 'latest')
-            prev_id = self._state_images.get(full_image)
+            prev_id = state_images.get(full_image)
             if prev_id:
                 prev_status = IMAGE_PRESENT
                 new_status = IMAGE_UPDATED
@@ -272,7 +271,7 @@ def _create_client(initial_maps):
                         new_status = IMAGE_PRESENT
                     new_tags = new_image.get('RepoTags')
                     if new_tags:
-                        self._state_images.update({tag: new_id for tag in new_tags})
+                        state_images.update({tag: new_id for tag in new_tags})
                 else:
                     new_status = IMAGE_ABSENT
             if prev_status != new_status:
@@ -304,6 +303,11 @@ def _create_client(initial_maps):
             self._last_action = None
             self._changes = {}
             return changes
+
+        def get_state_images(self, refresh=False):
+            if self._state_images is None or refresh:
+                self.images()
+            return self._state_images
 
         @property
         def last_action(self):
