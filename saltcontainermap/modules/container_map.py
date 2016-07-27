@@ -251,7 +251,7 @@ def _create_client(initial_maps):
         def pull(self, repository, tag=None, *args, **kwargs):
             if self._state_images is None:
                 self.images()
-            full_image = '{0}:{1}'.format(repository, tag) if tag else repository
+            full_image = '{0}:{1}'.format(repository, tag or 'latest')
             prev_id = self._state_images.get(full_image)
             if prev_id:
                 prev_status = IMAGE_PRESENT
