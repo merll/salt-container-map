@@ -462,9 +462,51 @@ def logged_in(name, username=None, password=None, email=None, reauth=False):
     return res
 
 
+def built(name, **kwargs):
+    '''
+    name
+        Image tag to apply.
+    ignore_existing : False
+        Rebuild the image if it exists. Note this does not imply ``nocache``, so might not actually generate a new
+        image.
+    show_log : True
+        Return the build output.
+    source
+        Dockerfile source (e.g. ``salt://...`` for a file loaded from the master).
+    saltenv : 'base'
+        Salt environment to use for loading source files.
+    template
+        Template engine to use for the source file.
+    context:
+        Additional template context.
+    contents
+        The script can be passed in here directly as a multiline string or list. Ignored if ``source`` is set.
+    content_pillar
+        Pillar to load the script contents from. Ignored if ``contents`` or ``source`` is set.
+    baseimage:
+        Image to base the build on. Ignored if ``source`` is used. Can also be included directly
+        using the ``FROM`` Dockerfile command.
+    maintainer:
+        Maintainer to state in the image. Ignored if ``source`` is used. Can also be included
+        using the ``MAINTAINER`` Dockerfile command.
+    kwargs
+        Additional keyword arguments for building the Docker image.
+    '''
+    ignore_existing = kwargs.pop('ignore_existing', False)
+    if not ignore_existing and __salt__['container_map.image_tag_exists']:
+        return dict(result=True, name=name, changes={}, comment="Image exists.")
+
+    res = __salt__['container_map.build'](name, **kwargs)
+    res['name'] = name
+    return res
+
+
 def mod_watch(name, sfun=None, **kwargs):
     if sfun == 'updated':
         kwargs['send_signal'] = True
         return updated(name, **kwargs)
+    elif sfun == 'built':
+        kwargs['ignore_existing'] = True
+        return built(name, **kwargs)
 
     return dict(name=name, result=False, changes={}, comment='watch requisite is not implemented for {0}'.format(sfun))

@@ -19,7 +19,8 @@ import sys
 
 from docker.errors import APIError, DockerException
 from dockermap.functional import expand_type_name, resolve_deep
-from dockermap.api import DockerClientWrapper, ClientConfiguration, ContainerMap, MappingDockerClient
+from dockermap.api import (DockerClientWrapper, ClientConfiguration, ContainerMap, MappingDockerClient,
+                           DockerFile, DockerContext)
 from dockermap.map.container import MapIntegrityError
 from salt.exceptions import SaltInvocationError
 from salt.ext import six
@@ -41,6 +42,8 @@ CONTAINER_SIGNALED = 'signaled'
 IMAGE_ABSENT = 'missing'
 IMAGE_PRESENT = 'present'
 IMAGE_UPDATED = 'updated'
+IMAGE_BUILT = 'built'
+IMAGE_REBUILT = 'rebuilt'
 EXEC_ABSENT = 'absent'
 EXEC_CREATED = 'created'
 EXEC_STARTED = 'started'
@@ -146,11 +149,18 @@ def _create_client(initial_maps):
         def __init__(self, *args, **kwargs):
             super(SaltDockerClient, self).__init__(*args, **kwargs)
             self._last_action = None
+            self._log = None
             self._changes = {}
             self._state_images = None
 
+        def _init_log(self):
+            self._log = []
+
         def _update_attempt(self, item_type, name, old_state, new_state):
             self._last_action = dict(item_type=item_type, item_id=name, old=old_state, new=new_state)
+
+        def _reset_status(self):
+            self._last_action = None
 
         def _update_status(self, item_type, name, old_state, new_state):
             key = '{0}:{1}'.format(item_type, name)
@@ -169,7 +179,42 @@ def _create_client(initial_maps):
             else:
                 state = {'old': old_state, 'new': new_state}
                 self._changes[key] = state
-            self._last_action = None
+
+        def build(self, tag, *args, **kwargs):
+            self._init_log()
+            state_images = self.get_state_images()
+            full_image = '{0}:latest'.format(tag) if ':' not in tag else tag
+            prev_id = state_images.get(full_image)
+            if prev_id:
+                prev_status = IMAGE_PRESENT
+                new_status = IMAGE_REBUILT
+            else:
+                prev_status = IMAGE_ABSENT
+                new_status = IMAGE_BUILT
+            if __opts__['test']:
+                res = None
+            else:
+                self._update_attempt(TYPE_IMAGE, full_image, prev_status, new_status)
+                res = super(SaltDockerClient, self).build(tag, *args, **kwargs)
+                if res:
+                    state_images[full_image] = res
+                else:
+                    new_status = prev_status
+
+            if prev_status != new_status:
+                self._update_status(TYPE_IMAGE, full_image, prev_status, new_status)
+            else:
+                self._reset_status()
+            return res
+
+        def tag(self, image, repository, tag=None, **kwargs):
+            if not __opts__['test']:
+                res = super(SaltDockerClient, self).tag(image, repository, tag=tag, **kwargs)
+                if res and image.startwith('sha') or ':' not in image:
+                    full_image = '{0}:{1}'.format(repository, tag or 'latest')
+                    self._state_images[image] = full_image
+                return res
+            return True
 
         def create_container(self, image, *args, **kwargs):
             if __opts__['test']:
@@ -281,7 +326,7 @@ def _create_client(initial_maps):
             if prev_status != new_status:
                 self._update_status(TYPE_IMAGE, full_image, prev_status, new_status)
             else:
-                self._last_action = None
+                self._reset_status()
             return res
 
         def remove_image(self, image, *args, **kwargs):
@@ -293,19 +338,26 @@ def _create_client(initial_maps):
             self._update_status(TYPE_IMAGE, image, IMAGE_PRESENT, IMAGE_ABSENT)
             return res
 
+        def push_log(self, info, *args, **kwargs):
+            super(SaltDockerClient, self).push_log(info, *args, **kwargs)
+            self._log.append(info)
+
         def run_cmd(self, cmd):
             if not __opts__['test']:
                 __salt__['cmd.run'](cmd)
 
-        def flush_changes(self):
+        def flush_changes(self, add_log=False):
             """
             Returns the changed items and clears the change log.
 
             :return: dict[unicode, dict[unicode, unicode]]
             """
             changes = self._changes
-            self._last_action = None
+            log = self._log
+            self._reset_status()
             self._changes = {}
+            if add_log:
+                changes['__log__'] = log
             return changes
 
         def get_state_images(self, refresh=False):
@@ -1180,3 +1232,119 @@ def login(registry, username=None, password=None, email=None, reauth=False, **kw
     except SUMMARY_EXCEPTIONS as e:
         return dict(result=False, item_id=registry, changes={}, comment=_exc_message(e), out=None)
     return dict(result=result, item_id=registry, changes={}, comment="Client logged in.", out=None)
+
+
+def image_tag_exists(repo_tag):
+    '''
+    Returns whether an image with a given repository is present (optionally including a tag, otherwise ``latest`` is
+    assumed).
+
+    repo_tag
+        Repository and optionally tag.
+    '''
+    images = get_client().default_client.get_state_images()
+    repo_tag = '{0}:latest'.format(repo_tag) if ':' not in repo_tag else repo_tag
+    return repo_tag in images
+
+
+def build(tag, show_log=True, source=None, saltenv='base', template=None, context=None, contents=None,
+          content_pillar=None, baseimage=None, maintainer=None, dockerfile=None, **kwargs):
+    '''
+    tag
+        Image tag to apply.
+    show_log : True
+        Return the build output.
+    source
+        Dockerfile source (e.g. ``salt://...`` for a file loaded from the master).
+    saltenv : 'base'
+        Salt environment to use for loading source files.
+    template
+        Template engine to use for the source file.
+    context:
+        Additional template context.
+    contents
+        The script can be passed in here directly as a multiline string or list. Ignored if ``source`` is set.
+    content_pillar
+        Pillar to load the script contents from. Ignored if ``contents`` or ``source`` is set.
+    baseimage:
+        Image to base the build on. Ignored if ``source`` is used. Can also be included directly
+        using the ``FROM`` Dockerfile command.
+    maintainer:
+        Maintainer to state in the image. Ignored if ``source`` is used. Can also be included
+        using the ``MAINTAINER`` Dockerfile command.
+    dockerfile
+        Dockerfile object. Only useful for other modules. Ignored if any of the aforementioned
+        ``source``, ``contents``, or ``content_pillar`` is set. Ignores ``baseimage`` and
+        ``maintainer``.
+    kwargs
+        Additional keyword arguments for building the Docker image.
+    '''
+    if source:
+        if template:
+            template_kwargs = {
+                'template': template,
+                'saltenv': saltenv,
+            }
+            if context:
+                template_kwargs['context'] = context
+            f = tempfile.NamedTemporaryFile(delete=False)
+            df_path = f.name
+            f.close()
+            log.debug("Copying Dockerfile to temporary file %s.", df_path)
+            try:
+                __salt__['cp.get_template'](source, df_path, **template_kwargs)
+                context = DockerContext(df_path, finalize=True)
+            finally:
+                try:
+                    log.debug("Cleaning up temporary Dockerfile %s.", df_path)
+                    os.unlink(df_path)
+                except OSError:
+                    pass
+        else:
+            cached_name = __salt__['cp.cache_file'](source, saltenv)
+            if not cached_name:
+                raise SaltInvocationError("Failed to cache source file {0}.".format(source))
+            log.debug("Using cached source file %s as Dockerfile.", cached_name)
+            context = DockerContext(cached_name, finalize=True)
+
+    elif content_pillar or contents:
+        if content_pillar and not contents:
+            contents = __salt__['pillar.get'](content_pillar)
+
+        if not contents:
+            raise SaltInvocationError("No content provided to create a Dockerfile.")
+
+        if isinstance(contents, list):
+            content_str = '\n'.join(contents)
+        elif isinstance(contents, six.string_types):
+            content_str = contents
+        else:
+            raise SaltInvocationError("Content must be either a string or a list of strings")
+
+        df_kwargs = {
+            'initial': content_str
+        }
+        if baseimage:
+            df_kwargs['baseimage'] = baseimage
+        if maintainer:
+            df_kwargs['maintainer'] = maintainer
+        context = DockerContext(DockerFile(**df_kwargs), finalize=True)
+
+    elif dockerfile:
+        context = DockerContext(dockerfile, finalize=True)
+
+    else:
+        raise SaltInvocationError("No Dockerfile input provided.")
+
+    m = get_client()
+    c = m.default_client
+    log.debug("Building image with tag %s.", tag)
+    try:
+        image_id = c.build_from_context(context, tag, **clean_kwargs(**kwargs))
+    except SUMMARY_EXCEPTIONS as e:
+        return dict(result=False, item_id=tag, changes={}, comment=_exc_message(e), out=None)
+    changes = c.flush_changes(add_log=show_log or not image_id)
+    if image_id:
+        return dict(result=True, item_id=tag, image_id=image_id, changes=changes, comment="Image built.", out=None)
+
+    return dict(result=False, item_id=tag, changes=changes, comment="Error while building the image.", out=None)
