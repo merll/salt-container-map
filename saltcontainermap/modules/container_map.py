@@ -130,6 +130,10 @@ def _get_single_ip_addresses(ipv6):
                 break
 
 
+def _exc_message(e):
+    return ''.join(traceback.format_exception_only(type(e), e))
+
+
 def _create_client(initial_maps):
     """
     :type initial_maps: dict[unicode, ContainerMap]
@@ -401,7 +405,7 @@ def _status(client, item_id=None, exception=None, output=None):
 
     fail = client.last_action or {}
     changes = client.flush_changes()
-    error_message = ''.join(traceback.format_exception_only(type(exception), exception))
+    error_message = _exc_message(exception)
     if changes:
         if fail:
             comment = ("{0} operations were finished, but one error occurred when changing {1[item_type]} "
@@ -540,7 +544,7 @@ def setup(name, containers=None, volumes=None, host=None, host_root=None, reposi
             m.refresh_names()
         except SUMMARY_EXCEPTIONS as e:
             return dict(result=False, item_id=name, changes={}, comment="Failed to load map '{0}': {1}.".format(
-                name, traceback.format_exception_only(type(e), e)), out=traceback.format_exc())
+                name, _exc_message(e)), out=traceback.format_exc())
     elif not ignore_existing:
         return dict(result=False, item_id=name, changes={},
                     comment="A map with name '{0}' is already loaded.".format(name))
@@ -591,7 +595,7 @@ def merge(name, containers=None, volumes=None, host=None, host_root=None, reposi
         m.refresh_names()
     except SUMMARY_EXCEPTIONS as e:
         return dict(result=False, item_id=name, changes={}, comment="Failed to merge map '{0}': {1}.".format(
-            name, traceback.format_exception_only(type(e), e)), out=traceback.format_exc())
+            name, _exc_message(e)), out=traceback.format_exc())
     return dict(result=True, item_id=name, changes={}, comment="Map '{0}' loaded.".format(name), out=None)
 
 
@@ -790,8 +794,7 @@ def update(container, instances=None, map_name=None, reload_signal=None, **kwarg
             try:
                 c.kill(ci_name, signal=reload_signal)
             except SUMMARY_EXCEPTIONS as e:
-                error_message = ''.join(traceback.format_exception_only(type(e), e))
-                errors[ci_name] = error_message
+                errors[ci_name] = _exc_message(e)
         signal_status = c.flush_changes()
         if errors:
             if signal_status:
@@ -817,8 +820,7 @@ def kill(container, instances=None, map_name=None, signal=None):
         try:
             c.kill(ci_name, signal=signal)
         except SUMMARY_EXCEPTIONS as e:
-            error_message = ''.join(traceback.format_exception_only(type(e), e))
-            errors[ci_name] = error_message
+            errors[ci_name] = _exc_message(e)
     status = c.flush_changes()
     if errors:
         if status:
@@ -1129,8 +1131,7 @@ def pull_latest_images(map_name=None, map_names=None, utility_images=True, insec
                 c.login(username=None, registry=registry_name)
             images.ensure_image(i_name, pull=True, insecure_registry=insecure_registry)
         except SUMMARY_EXCEPTIONS as e:
-            error_message = ''.join(traceback.format_exception_only(type(e), e))
-            errors[i_name] = error_message
+            errors[i_name] = _exc_message(e)
 
     status = c.flush_changes()
     if errors:
@@ -1177,6 +1178,5 @@ def login(registry, username=None, password=None, email=None, reauth=False, **kw
         result = client.login(username, password, email, registry=registry, reauth=reauth,
                               **clean_kwargs(**kwargs))
     except SUMMARY_EXCEPTIONS as e:
-        error_message = ''.join(traceback.format_exception_only(type(e), e))
-        return dict(result=False, item_id=registry, changes={}, comment=error_message, out=None)
+        return dict(result=False, item_id=registry, changes={}, comment=_exc_message(e), out=None)
     return dict(result=result, item_id=registry, changes={}, comment="Client logged in.", out=None)
