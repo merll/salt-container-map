@@ -149,15 +149,15 @@ def _create_client(initial_maps):
         def __init__(self, *args, **kwargs):
             super(SaltDockerClient, self).__init__(*args, **kwargs)
             self._last_action = None
-            self._log = None
+            self._log = []
             self._changes = {}
             self._state_images = None
 
-        def _init_log(self):
-            self._log = []
-
         def _update_attempt(self, item_type, name, old_state, new_state):
             self._last_action = dict(item_type=item_type, item_id=name, old=old_state, new=new_state)
+
+        def _reset_log(self):
+            self._log = []
 
         def _reset_status(self):
             self._last_action = None
@@ -181,7 +181,6 @@ def _create_client(initial_maps):
                 self._changes[key] = state
 
         def build(self, tag, *args, **kwargs):
-            self._init_log()
             state_images = self.get_state_images()
             full_image = '{0}:latest'.format(tag) if ':' not in tag else tag
             prev_id = state_images.get(full_image)
@@ -355,6 +354,7 @@ def _create_client(initial_maps):
             changes = self._changes
             log = self._log
             self._reset_status()
+            self._reset_log()
             self._changes = {}
             if add_log:
                 changes['__log__'] = log
@@ -1266,10 +1266,10 @@ def build(tag, show_log=True, source=None, saltenv='base', template=None, contex
         The script can be passed in here directly as a multiline string or list. Ignored if ``source`` is set.
     content_pillar
         Pillar to load the script contents from. Ignored if ``contents`` or ``source`` is set.
-    baseimage:
+    baseimage
         Image to base the build on. Ignored if ``source`` is used. Can also be included directly
         using the ``FROM`` Dockerfile command.
-    maintainer:
+    maintainer
         Maintainer to state in the image. Ignored if ``source`` is used. Can also be included
         using the ``MAINTAINER`` Dockerfile command.
     dockerfile
