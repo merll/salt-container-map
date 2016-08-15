@@ -453,7 +453,14 @@ def _status(client, item_id=None, exception=None, output=None):
             comment = "{0} operations would have been performed.".format(len(changes))
         else:
             comment = "{0} operations finished successfully.".format(len(changes))
-        return dict(result=True, item_id=item_id, changes=changes, comment=comment, out=output)
+        result_dict = {
+            'result': True,
+            'comment': comment,
+            'changes': changes,
+        }
+        if output:
+            result_dict['out'] = output
+        return result_dict
 
     fail = client.last_action or {}
     changes = client.flush_changes()
@@ -600,7 +607,7 @@ def setup(name, containers=None, volumes=None, host=None, host_root=None, reposi
     elif not ignore_existing:
         return dict(result=False, item_id=name, changes={},
                     comment="A map with name '{0}' is already loaded.".format(name))
-    return dict(result=True, item_id=name, changes={}, comment="Map '{0}' loaded.".format(name), out=None)
+    return dict(result=True, item_id=name, changes={}, comment="Map '{0}' loaded.".format(name))
 
 
 def merge(name, containers=None, volumes=None, host=None, host_root=None, repository=None, default_domain=None,
@@ -648,7 +655,7 @@ def merge(name, containers=None, volumes=None, host=None, host_root=None, reposi
     except SUMMARY_EXCEPTIONS as e:
         return dict(result=False, item_id=name, changes={}, comment="Failed to merge map '{0}': {1}.".format(
             name, _exc_message(e)), out=traceback.format_exc())
-    return dict(result=True, item_id=name, changes={}, comment="Map '{0}' loaded.".format(name), out=None)
+    return dict(result=True, item_id=name, changes={}, comment="Map '{0}' loaded.".format(name))
 
 
 def create(container, instances=None, map_name=None, **kwargs):
@@ -881,7 +888,7 @@ def kill(container, instances=None, map_name=None, signal=None):
             comment = "Failed to send signal {0} to all containers.".format(signal_str)
         return dict(result=False, item_id=container, changes=status, comment=comment, out=errors)
     return dict(result=True, item_id=container, changes=status,
-                comment="Signal {0} sent to selected containers.".format(signal_str), out=None)
+                comment="Signal {0} sent to selected containers.".format(signal_str))
 
 
 def cleanup_containers(include_initial=False, exclude=None):
@@ -1193,7 +1200,7 @@ def pull_latest_images(map_name=None, map_names=None, utility_images=True, insec
             comment = "All images failed to update."
         status.update(errors)
         return dict(result=False, item_id=map_name, changes=status, comment=comment, out=errors)
-    return dict(result=True, item_id=map_name, changes=status, comment="All images updated", out=None)
+    return dict(result=True, item_id=map_name, changes=status, comment="All images updated")
 
 
 def refresh_client():
@@ -1230,8 +1237,8 @@ def login(registry, username=None, password=None, email=None, reauth=False, **kw
         result = client.login(username, password, email, registry=registry, reauth=reauth,
                               **clean_kwargs(**kwargs))
     except SUMMARY_EXCEPTIONS as e:
-        return dict(result=False, item_id=registry, changes={}, comment=_exc_message(e), out=None)
-    return dict(result=result, item_id=registry, changes={}, comment="Client logged in.", out=None)
+        return dict(result=False, item_id=registry, changes={}, comment=_exc_message(e))
+    return dict(result=result, item_id=registry, changes={}, comment="Client logged in.")
 
 
 def image_tag_exists(repo_tag):
@@ -1342,9 +1349,9 @@ def build(tag, show_log=True, source=None, saltenv='base', template=None, contex
     try:
         image_id = c.build_from_context(context, tag, **clean_kwargs(**kwargs))
     except SUMMARY_EXCEPTIONS as e:
-        return dict(result=False, item_id=tag, changes={}, comment=_exc_message(e), out=None)
+        return dict(result=False, item_id=tag, changes={}, comment=_exc_message(e))
     changes = c.flush_changes(add_log=show_log or not image_id)
     if image_id:
-        return dict(result=True, item_id=tag, image_id=image_id, changes=changes, comment="Image built.", out=None)
+        return dict(result=True, item_id=tag, image_id=image_id, changes=changes, comment="Image built.")
 
-    return dict(result=False, item_id=tag, changes=changes, comment="Error while building the image.", out=None)
+    return dict(result=False, item_id=tag, changes=changes, comment="Error while building the image.")
