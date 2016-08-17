@@ -1088,8 +1088,6 @@ def script(container, instance=None, map_name=None, wait_timeout=10, autoremove_
                 __salt__['cp.get_template'](source, script_path, template=template, saltenv=saltenv)
             else:
                 cached_name = __salt__['cp.cache_file'](source, saltenv)
-                if not cached_name:
-                    raise SaltInvocationError("Failed to cache source file {0}.".format(source))
                 shutil.copyfile(cached_name, script_path)
         else:
             if content_pillar and not contents:
