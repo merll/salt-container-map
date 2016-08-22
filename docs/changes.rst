@@ -2,6 +2,15 @@
 
 Change History
 ==============
+0.1.9
+-----
+* Added build function and built state.
+* Added controlled shutdown to container removal (``remove_all_containers``).
+* De-duplication of image names before pull.
+* Configurable ``base_image`` and ``core_image``.
+* Key ``out`` is only returned by module functions for non-empty output.
+* Various bugfixes from `0.1.9b1`.
+
 0.1.9b1
 -------
 * Added tag whitelist to ``cleanup_images`` module method and ``images_clean`` state.
