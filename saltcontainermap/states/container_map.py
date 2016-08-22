@@ -493,7 +493,7 @@ def built(name, **kwargs):
         Additional keyword arguments for building the Docker image.
     '''
     ignore_existing = kwargs.pop('ignore_existing', False)
-    if not ignore_existing and __salt__['container_map.image_tag_exists']:
+    if not ignore_existing and __salt__['container_map.image_tag_exists'](name):
         return dict(result=True, name=name, changes={}, comment="Image exists.")
 
     res = __salt__['container_map.build'](name, **kwargs)
