@@ -2,6 +2,10 @@
 
 Change History
 ==============
+0.1.10
+------
+* Fixed import for compatibility with Docker-Map.
+
 0.1.9
 -----
 * Added build function and built state.

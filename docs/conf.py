@@ -52,7 +52,7 @@ master_doc = 'index'
 
 # General information about the project.
 project = 'Salt Container-Map'
-copyright = '2016, Matthias Erll'
+copyright = '2017, Matthias Erll'
 author = 'Matthias Erll'
 
 # The version info for the project you're documenting, acts as replacement for

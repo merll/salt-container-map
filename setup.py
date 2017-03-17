@@ -23,7 +23,7 @@ setup(
     name='salt-container-map',
     version=__version__,
     packages=find_packages(),
-    install_requires=['salt', 'docker-map>=0.6.6b1'],
+    install_requires=['salt', 'docker-map>=0.7.1'],
     license='MIT',
     author='Matthias Erll',
     author_email='matthias@erll.de',
