@@ -21,7 +21,7 @@ from docker.errors import APIError, DockerException
 from dockermap.functional import expand_type_name, resolve_deep
 from dockermap.api import (DockerClientWrapper, ClientConfiguration, ContainerMap, MappingDockerClient,
                            DockerFile, DockerContext)
-from dockermap.map.container import MapIntegrityError
+from dockermap.map.config.main import MapIntegrityError
 from salt.exceptions import SaltInvocationError
 from salt.ext import six
 from salt.ext.six.moves import zip
