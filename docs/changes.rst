@@ -2,6 +2,10 @@
 
 Change History
 ==============
+0.1.11
+------
+* Fixed access to a method removed from Docker-Map.
+
 0.1.10
 ------
 * Fixed import for compatibility with Docker-Map.
