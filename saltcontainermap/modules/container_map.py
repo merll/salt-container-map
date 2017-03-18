@@ -411,8 +411,7 @@ def _create_client(initial_maps):
 
         def __init__(self, *args, **kwargs):
             super(SaltDockerMap, self).__init__(*args, **kwargs)
-            default_name = self.policy_class.get_default_client_name()
-            self._default_client_name = default_name
+            self._default_client_name = default_name = self.policy_class.default_client_name
             self._default_config = self.clients[default_name]
             base_image = _get_setting('container_map', 'base_image')
             if base_image:
