@@ -888,7 +888,7 @@ def kill(container, instances=None, map_name=None, signal=None):
     c = m.default_client
     policy = m.get_policy()
     errors = {}
-    signal_str = signal or 'SIGKILL'
+    signal = signal or 'SIGKILL'
     for instance_name in instances or [None]:
         ci_name = policy.cname(container_map, container_name, instance_name)
         try:
@@ -898,12 +898,12 @@ def kill(container, instances=None, map_name=None, signal=None):
     status = c.flush_changes()
     if errors:
         if status:
-            comment = "Failed to send signal {0} to some containers.".format(signal_str)
+            comment = "Failed to send signal {0} to some containers.".format(signal)
         else:
-            comment = "Failed to send signal {0} to all containers.".format(signal_str)
+            comment = "Failed to send signal {0} to all containers.".format(signal)
         return dict(result=False, item_id=container, changes=status, comment=comment, out=errors)
     return dict(result=True, item_id=container, changes=status,
-                comment="Signal {0} sent to selected containers.".format(signal_str))
+                comment="Signal {0} sent to selected containers.".format(signal))
 
 
 def cleanup_containers(include_initial=False, exclude=None):
