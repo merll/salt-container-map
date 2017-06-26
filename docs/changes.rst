@@ -2,6 +2,11 @@
 
 Change History
 ==============
+0.1.12
+------
+* Fixed sending wrong signal in ``kill`` function.
+* Fixed container removal in ``remove_all_containers``.
+
 0.1.11
 ------
 * Fixed access to a method removed from Docker-Map.
