@@ -998,7 +998,7 @@ def remove_all_containers(stop_timeout=None, shutdown_maps='__all__', shutdown_f
             if c_map and config_name in c_map.containers:
                 m.shutdown(config_name, instances=[instance_name], map_name=map_name)
         for container_map in sd_maps:
-            for config_name in container_map.containers:
+            for config_name in container_map.containers.keys():
                 m.shutdown(config_name, map_name=container_map.name)
         c.remove_all_containers(stop_timeout=stop_timeout)
     except SUMMARY_EXCEPTIONS as e:
