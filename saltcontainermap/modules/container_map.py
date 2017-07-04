@@ -95,6 +95,8 @@ def _get_resolver(code_pillar, code_grain):
 def _split_map_name(name, map_name):
     if not map_name:
         container_map, __, container_name = name.partition('.')
+        if not container_name:
+            return container_map, None
         return container_name, container_map or None
     return name, map_name
 
@@ -996,7 +998,7 @@ def remove_all_containers(stop_timeout=None, shutdown_maps='__all__', shutdown_f
             config_name, __, instance_name = config_instance.partition('.')
             c_map = _get_ext_map(map_name)
             if c_map and config_name in c_map.containers:
-                m.shutdown(config_name, instances=[instance_name], map_name=map_name)
+                m.shutdown(config_name, instances=[instance_name or None], map_name=map_name)
         for container_map in sd_maps:
             for config_name in container_map.containers.keys():
                 m.shutdown(config_name, map_name=container_map.name)
