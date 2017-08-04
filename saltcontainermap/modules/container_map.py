@@ -21,6 +21,7 @@ from docker.errors import APIError, DockerException
 from dockermap.functional import expand_type_name, resolve_deep
 from dockermap.api import (DockerClientWrapper, ClientConfiguration, ContainerMap, MappingDockerClient,
                            DockerFile, DockerContext)
+from dockermap.map.input import get_map_config_ids
 from dockermap.map.config.main import MapIntegrityError
 from salt.exceptions import SaltInvocationError
 from salt.ext import six
@@ -90,15 +91,6 @@ def _get_resolver(code_pillar, code_grain):
         return ext_data
 
     return _resolve
-
-
-def _split_map_name(name, map_name):
-    if not map_name:
-        container_map, __, container_name = name.partition('.')
-        if not container_name:
-            return container_map, None
-        return container_name, container_map or None
-    return name, map_name
 
 
 def _get_auth_data(registry):
@@ -688,10 +680,9 @@ def create(container, instances=None, map_name=None, **kwargs):
     kwargs
         Extra keyword arguments for the container creation.
     '''
-    container_name, container_map = _split_map_name(container, map_name)
     m = get_client()
     try:
-        m.create(container_name, instances=instances, map_name=container_map, **clean_kwargs(**kwargs))
+        m.create(container, instances=instances, map_name=map_name, **clean_kwargs(**kwargs))
     except SUMMARY_EXCEPTIONS as e:
         return _status(m.default_client, exception=e)
     return _status(m.default_client, item_id=container)
@@ -711,10 +702,9 @@ def start(container, instances=None, map_name=None, **kwargs):
     kwargs
         Extra keyword arguments for the container start.
     '''
-    container_name, container_map = _split_map_name(container, map_name)
     m = get_client()
     try:
-        m.start(container_name, instances=instances, map_name=container_map, **clean_kwargs(**kwargs))
+        m.start(container, instances=instances, map_name=map_name, **clean_kwargs(**kwargs))
     except SUMMARY_EXCEPTIONS as e:
         return _status(m.default_client, exception=e)
     return _status(m.default_client, item_id=container)
@@ -733,10 +723,9 @@ def stop(container, instances=None, map_name=None, **kwargs):
     kwargs
         Extra keyword arguments for the container stop.
     '''
-    container_name, container_map = _split_map_name(container, map_name)
     m = get_client()
     try:
-        m.stop(container_name, instances=instances, map_name=container_map, **clean_kwargs(**kwargs))
+        m.stop(container, instances=instances, map_name=map_name, **clean_kwargs(**kwargs))
     except SUMMARY_EXCEPTIONS as e:
         return _status(m.default_client, exception=e)
     return _status(m.default_client, item_id=container)
@@ -756,10 +745,9 @@ def remove(container, instances=None, map_name=None, **kwargs):
     kwargs
         Extra keyword arguments for the container removal.
     '''
-    container_name, container_map = _split_map_name(container, map_name)
     m = get_client()
     try:
-        m.remove(container_name, instances=instances, map_name=container_map, **clean_kwargs(**kwargs))
+        m.remove(container, instances=instances, map_name=map_name, **clean_kwargs(**kwargs))
     except SUMMARY_EXCEPTIONS as e:
         return _status(m.default_client, exception=e)
     return _status(m.default_client, item_id=container)
@@ -778,10 +766,9 @@ def restart(container, instances=None, map_name=None, **kwargs):
     kwargs
         Extra keyword arguments for the container restart.
     '''
-    container_name, container_map = _split_map_name(container, map_name)
     m = get_client()
     try:
-        m.restart(container_name, instances=instances, map_name=container_map, **clean_kwargs(**kwargs))
+        m.restart(container, instances=instances, map_name=map_name, **clean_kwargs(**kwargs))
     except SUMMARY_EXCEPTIONS as e:
         return _status(m.default_client, exception=e)
     return _status(m.default_client, item_id=container)
@@ -800,10 +787,9 @@ def startup(container, instances=None, map_name=None, **kwargs):
     kwargs
         Extra keyword arguments for the container startup.
     '''
-    container_name, container_map = _split_map_name(container, map_name)
     m = get_client()
     try:
-        m.startup(container_name, instances=instances, map_name=container_map, **clean_kwargs(**kwargs))
+        m.startup(container, instances=instances, map_name=map_name, **clean_kwargs(**kwargs))
     except SUMMARY_EXCEPTIONS as e:
         return _status(m.default_client, exception=e)
     return _status(m.default_client, item_id=container)
@@ -822,10 +808,9 @@ def shutdown(container, instances=None, map_name=None, **kwargs):
     kwargs
         Extra keyword arguments for the container shutdown.
     '''
-    container_name, container_map = _split_map_name(container, map_name)
     m = get_client()
     try:
-        m.shutdown(container_name, instances=instances, map_name=container_map, **clean_kwargs(**kwargs))
+        m.shutdown(container, instances=instances, map_name=map_name, **clean_kwargs(**kwargs))
     except SUMMARY_EXCEPTIONS as e:
         return _status(m.default_client, exception=e)
     return _status(m.default_client, item_id=container)
@@ -853,13 +838,14 @@ def update(container, instances=None, map_name=None, reload_signal=None, **kwarg
     kwargs
         Extra keyword arguments for the container update.
     '''
-    container_name, container_map = _split_map_name(container, map_name)
+    config_ids = get_map_config_ids(container, map_name=map_name, instances=instances)
     m = get_client()
     c = m.default_client
     policy = m.get_policy()
-    names = set(policy.cname(container_map, container_name, instance) for instance in instances or [None])
+    names = {policy.cname(config_id.map_name, config_id.config_name, config_id.instance_name)
+             for config_id in config_ids}
     try:
-        m.update(container_name, instances=instances, map_name=container_map, **clean_kwargs(**kwargs))
+        m.update(config_ids, **clean_kwargs(**kwargs))
     except SUMMARY_EXCEPTIONS as e:
         return _status(c, exception=e)
     res = _status(c, item_id=container)
@@ -885,14 +871,14 @@ def update(container, instances=None, map_name=None, reload_signal=None, **kwarg
 
 
 def kill(container, instances=None, map_name=None, signal=None):
-    container_name, container_map = _split_map_name(container, map_name)
+    config_ids = get_map_config_ids(container, map_name=map_name, instances=instances)
     m = get_client()
     c = m.default_client
     policy = m.get_policy()
     errors = {}
     signal = signal or 'SIGKILL'
-    for instance_name in instances or [None]:
-        ci_name = policy.cname(container_map, container_name, instance_name)
+    for config_id in config_ids:
+        ci_name = policy.cname(config_id.map_name, config_id.config_name, config_id.instance_name)
         try:
             c.kill(ci_name, signal=signal)
         except SUMMARY_EXCEPTIONS as e:
@@ -1023,10 +1009,9 @@ def call(action_name, container, instances=None, map_name=None, **kwargs):
     kwargs
         Extra keyword arguments for the container action.
     '''
-    container_name, container_map = _split_map_name(container, map_name)
     m = get_client()
     try:
-        m.call(action_name, container_name, instances=instances, map_name=container_map, **clean_kwargs(**kwargs))
+        m.call(action_name, container, instances=instances, map_name=map_name, **clean_kwargs(**kwargs))
     except SUMMARY_EXCEPTIONS as e:
         return _status(m.default_client, exception=e)
     return _status(m.default_client, item_id=container)
@@ -1124,14 +1109,14 @@ def script(container, instance=None, map_name=None, wait_timeout=10, autoremove_
                     if content_str[-1] != '\n':
                         script_file.write('\n')
 
-        container_name, container_map = _split_map_name(container, map_name)
+        config_id = get_map_config_ids(container, map_name=map_name, instances=instance)[0]
         m = get_client()
         policy = m.get_policy()
         policy.remove_existing_before = autoremove_before
         policy.remove_created_after = autoremove_after
 
         if script_dir:
-            ch_user = user or m.maps[container_map].containers[container_name].user
+            ch_user = user or m.maps[config_id.map_name].containers[config_id.config_name].user
             log.debug("Changing user of %s to %s.", script_dir, ch_user)
             __salt__['file.check_perms'](script_dir, {}, ch_user, group, dir_mode)
             if script_path:
@@ -1139,8 +1124,8 @@ def script(container, instance=None, map_name=None, wait_timeout=10, autoremove_
                 __salt__['file.check_perms'](script_path, {}, ch_user, group, file_mode)
         try:
             log.debug("Running script in container %s.%s.\nHost path: %s\nEntrypoint: %s\nCommand template: %s",
-                      container_map, container_name, script_path or script_dir, entrypoint, command_format)
-            res = m.run_script(container_name, instance=instance, map_name=container_map,
+                      config_id.map_name, config_id.config_name, script_path or script_dir, entrypoint, command_format)
+            res = m.run_script(config_id,
                                script_path=script_path or script_dir,
                                entrypoint=entrypoint, command_format=command_format, wait_timeout=wait_timeout,
                                container_script_dir=container_script_dir, timestamps=timestamps, tail=tail,
