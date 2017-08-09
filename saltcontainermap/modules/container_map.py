@@ -847,7 +847,7 @@ def update(container, instances=None, map_name=None, reload_signal=None, **kwarg
     return res
 
 
-def kill(container, instances=None, map_name=None, signal=None):
+def kill(container, instances=None, map_name=None, signal=None, **kwargs):
     m = get_client()
     try:
         m.kill(container, instances=instances, map_name=map_name, signal=signal, **clean_kwargs(**kwargs))
