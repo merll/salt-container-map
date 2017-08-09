@@ -871,27 +871,12 @@ def update(container, instances=None, map_name=None, reload_signal=None, **kwarg
 
 
 def kill(container, instances=None, map_name=None, signal=None):
-    config_ids = get_map_config_ids(container, map_name=map_name, instances=instances)
     m = get_client()
-    c = m.default_client
-    policy = m.get_policy()
-    errors = {}
-    signal = signal or 'SIGKILL'
-    for config_id in config_ids:
-        ci_name = policy.cname(config_id.map_name, config_id.config_name, config_id.instance_name)
-        try:
-            c.kill(ci_name, signal=signal)
-        except SUMMARY_EXCEPTIONS as e:
-            errors[ci_name] = _exc_message(e)
-    status = c.flush_changes()
-    if errors:
-        if status:
-            comment = "Failed to send signal {0} to some containers.".format(signal)
-        else:
-            comment = "Failed to send signal {0} to all containers.".format(signal)
-        return dict(result=False, item_id=container, changes=status, comment=comment, out=errors)
-    return dict(result=True, item_id=container, changes=status,
-                comment="Signal {0} sent to selected containers.".format(signal))
+    try:
+        m.kill(container, instances=instances, map_name=map_name, signal=signal, **clean_kwargs(**kwargs))
+    except SUMMARY_EXCEPTIONS as e:
+        return _status(m.default_client, exception=e)
+    return _status(m.default_client, item_id=container)
 
 
 def cleanup_containers(include_initial=False, exclude=None):
