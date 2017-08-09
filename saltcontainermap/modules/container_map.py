@@ -908,48 +908,10 @@ def remove_all_containers(stop_timeout=None, shutdown_maps='__all__', shutdown_f
     '''
     stop_timeout = stop_timeout or _get_setting('docker', 'stop_timeout', 10)
     m = get_client()
-    ext_cache = {}
-
-    def _get_ext_map(name, base_map=None):
-        ext_map = ext_cache.get(name)
-        if not ext_map:
-            if not base_map:
-                base_map = m.maps.get(name)
-            ext_cache[name] = ext_map = base_map.get_extended_map()
-        return ext_map
-
-    if shutdown_first:
-        if isinstance(shutdown_first, (tuple, list)):
-            sf_list = shutdown_first
-        else:
-            sf_list = [shutdown_first]
-    else:
-        sf_list = []
-    if shutdown_maps:
-        if shutdown_maps == '__all__':
-            sd_maps = [_get_ext_map(map_name, container_map)
-                       for map_name, container_map in six.iteritems(m.maps)]
-        elif isinstance(shutdown_maps, (tuple, list)):
-            sd_maps = [_get_ext_map(map_name) for map_name in shutdown_maps]
-        else:
-            sd_maps = [_get_ext_map(shutdown_maps)]
-    else:
-        sd_maps = []
     c = m.default_client
     try:
-        for sf in sf_list:
-            map_name, __, config_instance = sf.partition('.')
-            if not all((map_name, config_instance)):
-                raise SaltInvocationError("Items of 'shutdown_first' must be in the format "
-                                          "'<map name>.<container config>', optionally followed by "
-                                          "'<instance name>.")
-            config_name, __, instance_name = config_instance.partition('.')
-            c_map = _get_ext_map(map_name)
-            if c_map and config_name in c_map.containers:
-                m.shutdown(config_name, instances=[instance_name or None], map_name=map_name)
-        for container_map in sd_maps:
-            for config_name in container_map.containers.keys():
-                m.shutdown(config_name, map_name=container_map.name)
+        m.shutdown(shutdown_first, map_name=shutdown_maps or '__all__')
+        m.shutdown('__all__', map_name=shutdown_maps or '__all__')
         c.remove_all_containers(stop_timeout=stop_timeout)
     except SUMMARY_EXCEPTIONS as e:
         return _status(c, exception=e)
