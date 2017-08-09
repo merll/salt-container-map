@@ -93,17 +93,6 @@ def _get_resolver(code_pillar, code_grain):
     return _resolve
 
 
-def _get_auth_data(registry):
-    auth_data = __salt__['pillar.get']('docker-registries')
-    if isinstance(auth_data, dict):
-        registry_auth = auth_data.get(registry)
-        if registry_auth:
-            log.debug("Found authentication data for registry %s, user %s.", registry, registry_auth.get('username'))
-            return auth_data.get(registry)
-    log.debug("No authentication data for registry %s found.", registry)
-    return None
-
-
 def _get_setting(prefix, name, default=None):
     pg_name = '{0}:{1}'.format(prefix, name)
     value = __salt__['pillar.get'](pg_name, None)
@@ -278,19 +267,6 @@ def _create_client(initial_maps):
             self._state_images = image_dict
             return image_list
 
-        def login(self, username, password=None, email=None, registry=None, **kwargs):
-            if registry:
-                auth_data = _get_auth_data(registry)
-                if isinstance(auth_data, dict):
-                    if not username:
-                        username = auth_data.get('username')
-                    if not password:
-                        password = auth_data.get('password')
-                    if not email:
-                        email = auth_data.get('email')
-                    return super(SaltDockerClient, self).login(username, password, email, registry, **kwargs)
-            return super(SaltDockerClient, self).login(username, password, email, registry, **kwargs)
-
         def pull(self, repository, tag=None, *args, **kwargs):
             state_images = self.get_state_images()
             full_image = '{0}:{1}'.format(repository, tag or 'latest')
@@ -395,6 +371,7 @@ def _create_client(initial_maps):
             kwargs['interfaces'] = interfaces_ipv4
             kwargs['interfaces_ipv6'] = interfaces_ipv6
             log.debug("Creating client config: %s", kwargs)
+            kwargs['auth_configs'] = __salt__['pillar.get']('docker-registries', None)
             super(SaltDockerClientConfig, self).__init__(*args, **kwargs)
 
     class SaltDockerMap(MappingDockerClient):
