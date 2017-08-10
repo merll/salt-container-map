@@ -419,7 +419,7 @@ def images_clean(name, remove_old=False, keep_tags=None):
     return res
 
 
-def images_updated(name, map_name=None, map_names=None, utility_images=True, insecure_registry=False):
+def images_updated(name, map_name=None, utility_images=True, insecure_registry=False):
     '''
     Ensures that all images on a map are updated to their latest version or the specified tag.
 
@@ -434,7 +434,7 @@ def images_updated(name, map_name=None, map_names=None, utility_images=True, ins
     insecure_registry : False
         Allow `insecure` registries for retrieving images.
     '''
-    res = __salt__['container_map.pull_latest_images'](map_name=map_name, map_names=map_names,
+    res = __salt__['container_map.pull_latest_images'](name, map_name=map_name,
                                                        utility_images=utility_images,
                                                        insecure_registry=insecure_registry)
     res['name'] = map_name or '__base__'

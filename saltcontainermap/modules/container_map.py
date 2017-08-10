@@ -850,7 +850,7 @@ def update(container, instances=None, map_name=None, reload_signal=None, **kwarg
 def kill(container, instances=None, map_name=None, signal=None, **kwargs):
     m = get_client()
     try:
-        m.kill(container, instances=instances, map_name=map_name, signal=signal, **clean_kwargs(**kwargs))
+        m.signal(container, instances=instances, map_name=map_name, signal=signal, **clean_kwargs(**kwargs))
     except SUMMARY_EXCEPTIONS as e:
         return _status(m.default_client, exception=e)
     return _status(m.default_client, item_id=container)
@@ -1069,62 +1069,39 @@ def script(container, instance=None, map_name=None, wait_timeout=10, autoremove_
                 pass
 
 
-def pull_latest_images(map_name=None, map_names=None, utility_images=True, insecure_registry=False):
+def pull_images(container=None, map_name=None, utility_images=True, insecure_registry=False):
     '''
-    Updates all images on a map to their latest version or the specified tag.
+    Updates images on a map to their latest version or the specified tag. If neither container or map name are specified
+    all images on all maps are being pulled.
 
+    container
+        Optional container configuration names.
     map_name
         Container map name.
-    map_names
-        Multiple container map names. Can be used instead of, or in conjunction with ``map_name``.
     utility_images : True
         Unless set to ``False``, also updates utility images such as ``busybox`` and ``tianon/true``.
     insecure_registry : False
         Allow `insecure` registries for retrieving images.
     '''
+    if not container:
+        if not map_name:
+            map_name = '__all__'
+        container = '__all__'
     m = get_client()
     c = m.default_client
-    if map_names:
-        names = map_names[:]
-        if map_name:
-            names.append(map_name)
-    elif map_name:
-        if map_name == '__all__':
-            names = list(m.maps.keys())
-        else:
-            names = [map_name]
-    else:
-        names = None
     policy = m.get_policy()
-    images = policy.images[m.default_client_name]
-    errors = {}
-    if utility_images:
-        pull_images = {policy.base_image, policy.core_image}
-    else:
-        pull_images = set()
-    if names:
-        for map_name in names:
-            c_map = m.maps[map_name].get_extended_map()
-            pull_images.update(policy.image_name(config.image or c_name, c_map)
-                               for c_name, config in c_map)
-    for i_name in pull_images:
-        registry_name, __, image_name = i_name.rpartition('/')
-        try:
-            if registry_name and '.' in registry_name:
-                c.login(username=None, registry=registry_name)
-            images.ensure_image(i_name, pull=True, insecure_registry=insecure_registry)
-        except SUMMARY_EXCEPTIONS as e:
-            errors[i_name] = _exc_message(e)
-
-    status = c.flush_changes()
-    if errors:
-        if status:
-            comment = "At least one image failed to update."
-        else:
-            comment = "All images failed to update."
-        status.update(errors)
-        return dict(result=False, item_id=map_name, changes=status, comment=comment, out=errors)
-    return dict(result=True, item_id=map_name, changes=status, comment="All images updated")
+    try:
+        m.pull_images(container, map_name=map_name, insecure_registry=insecure_registry)
+        if utility_images:
+            for image_name in [policy.base_image, policy.core_image]:
+                name, __, tag = image_name.rpartition(':')
+                if not name:
+                    name = tag
+                    tag = None
+                c.pull(name, tag=tag, insecure_registry=insecure_registry)
+    except SUMMARY_EXCEPTIONS as e:
+        return _status(m.default_client, exception=e)
+    return _status(m.default_client, item_id=container)
 
 
 def refresh_client():
