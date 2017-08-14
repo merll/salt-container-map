@@ -20,37 +20,19 @@ import sys
 from docker.errors import APIError, DockerException
 from dockermap.functional import expand_type_name, resolve_deep
 from dockermap.api import (DockerClientWrapper, ClientConfiguration, ContainerMap, MappingDockerClient,
-                           DockerFile, DockerContext)
-from dockermap.map.input import get_map_config_ids
+                           DockerFile, DockerContext, ActionRunnerException, PartialResultsError)
+from dockermap.map.action import Action, ImageAction
 from dockermap.map.config.main import MapIntegrityError
+from dockermap.map.input import get_map_config_ids
+from dockermap.map.runner import AbstractRunner
 from salt.exceptions import SaltInvocationError
 from salt.ext import six
 from salt.ext.six.moves import zip
 from salt.utils import clean_kwargs
 
+
 VIRTUAL_NAME = 'container_map'
 
-TYPE_CONTAINER = 'container'
-TYPE_IMAGE = 'image'
-TYPE_EXEC = 'command'
-
-CONTAINER_ABSENT = 'absent'
-CONTAINER_PRESENT = 'present'
-CONTAINER_RUNNING = 'running'
-CONTAINER_RESTARTED = 'restarted'
-CONTAINER_STOPPED = 'stopped'
-CONTAINER_UPDATED = 'updated'
-CONTAINER_SIGNALED = 'signaled'
-IMAGE_ABSENT = 'missing'
-IMAGE_PRESENT = 'present'
-IMAGE_UPDATED = 'updated'
-IMAGE_BUILT = 'built'
-IMAGE_REBUILT = 'rebuilt'
-EXEC_ABSENT = 'absent'
-EXEC_CREATED = 'created'
-EXEC_STARTED = 'started'
-
-UPDATED_STATES = (CONTAINER_RUNNING, CONTAINER_PRESENT)
 SUMMARY_EXCEPTIONS = (KeyError, ValueError, APIError, DockerException, MapIntegrityError)
 
 log = logging.getLogger(__name__)
@@ -121,74 +103,84 @@ def _exc_message(e):
     return ''.join(traceback.format_exception_only(type(e), e))
 
 
+def _get_action_state(a):
+    v = a.value
+    av, __, ao = v.partition('_')
+    if ao:
+        v = '{0}_{1}'.format(ao, av)
+    if v[-1:] == 'e':
+        return '{0}d'.format(v)
+    return '{0}ed'.format(v)
+
+
+def _get_item_name(config_id):
+    if config_id.instance_name:
+        return '{0[0].value}:{0[1]}.{0[2]}.{0[3]}'.format(config_id)
+    return '{0[0].value}:{0[1]}.{0[2]}'.format(config_id)
+
+
+def _get_success_comment(changes):
+    if not changes:
+        return "There are no changes to apply."
+    elif __opts__['test']:
+        return "{0} operations would have been performed.".format(len(changes))
+    return "{0} operations finished successfully.".format(len(changes))
+
+
+def _get_failure_comment(changes, error_message, fail_item=None, action=None):
+    if fail_item:
+        item_str = ' on {0}'.format(_get_item_name(fail_item))
+        if action:
+            action_str = ' during action {0}'.format(action)
+        else:
+            action_str = ''
+    else:
+        item_str = ''
+        action_str = ''
+    if changes:
+        return ("{0} operations were finished, but one error occurred{1}{2}: "
+                "{3}").format(len(changes), item_str, action_str, error_message)
+    return "An error occurred{0}{1}. No changes were made: {2}".format(item_str, action_str, error_message)
+
+
 def _create_client(initial_maps):
     """
     :type initial_maps: dict[unicode, ContainerMap]
     :rtype: SaltDockerMap
     """
+    class TestOutputRunner(AbstractRunner):
+        def __init__(self, *args, **kwargs):
+            super(TestOutputRunner, self).__init__(*args, **kwargs)
+            self._test_states = {}
+
+        def run_actions(self, actions):
+            for action in actions:
+                a_types = action.action_types
+                if Action.CREATE in a_types:
+                    if Action.REMOVE in action.action_types:
+                        new_state = 'updated'
+                    else:
+                        new_state = 'present'
+                elif Action.REMOVE in a_types:
+                    new_state = 'absent'
+                elif ImageAction.PULL:
+                    new_state = 'updated'
+                else:
+                    new_state = _get_action_state(a_types[-1])
+                self._test_states[_get_item_name(action.config_id)] = new_state
+
+        @property
+        def test_states(self):
+            return self._test_states
+
     class SaltDockerClient(DockerClientWrapper):
         """
         Enhanced Docker client for SaltStack, which maintains something similar to a change log based on container actions.
         """
         def __init__(self, *args, **kwargs):
             super(SaltDockerClient, self).__init__(*args, **kwargs)
-            self._last_action = None
             self._log = []
-            self._changes = {}
             self._state_images = None
-
-        def _update_attempt(self, item_type, name, old_state, new_state):
-            self._last_action = dict(item_type=item_type, item_id=name, old=old_state, new=new_state)
-
-        def _reset_log(self):
-            self._log = []
-
-        def _reset_status(self):
-            self._last_action = None
-
-        def _update_status(self, item_type, name, old_state, new_state):
-            key = '{0}:{1}'.format(item_type, name)
-            state = self._changes.get(key)
-            if state:
-                old_val = state['old']
-                if item_type == TYPE_CONTAINER:
-                    if old_val == CONTAINER_ABSENT and new_state == CONTAINER_ABSENT:
-                        del self._changes[key]
-                    elif old_val in UPDATED_STATES and new_state in UPDATED_STATES:
-                        state['new'] = CONTAINER_UPDATED
-                    else:
-                        state['new'] = new_state
-                else:
-                    state['new'] = new_state
-            else:
-                state = {'old': old_state, 'new': new_state}
-                self._changes[key] = state
-
-        def build(self, tag, *args, **kwargs):
-            state_images = self.get_state_images()
-            full_image = '{0}:latest'.format(tag) if ':' not in tag else tag
-            prev_id = state_images.get(full_image)
-            if prev_id:
-                prev_status = IMAGE_PRESENT
-                new_status = IMAGE_REBUILT
-            else:
-                prev_status = IMAGE_ABSENT
-                new_status = IMAGE_BUILT
-            if __opts__['test']:
-                res = None
-            else:
-                self._update_attempt(TYPE_IMAGE, full_image, prev_status, new_status)
-                res = super(SaltDockerClient, self).build(tag, *args, **kwargs)
-                if res:
-                    state_images[full_image] = res
-                else:
-                    new_status = prev_status
-
-            if prev_status != new_status:
-                self._update_status(TYPE_IMAGE, full_image, prev_status, new_status)
-            else:
-                self._reset_status()
-            return res
 
         def tag(self, image, repository, tag=None, **kwargs):
             if not __opts__['test']:
@@ -198,60 +190,6 @@ def _create_client(initial_maps):
                     self._state_images[image] = full_image
                 return res
             return True
-
-        def create_container(self, image, *args, **kwargs):
-            if __opts__['test']:
-                res = {'Name': '/__unknown__', 'Id': '__unknown__'}
-            else:
-                self._update_attempt(TYPE_CONTAINER, kwargs.get('name', '__unknown__'), CONTAINER_ABSENT, CONTAINER_PRESENT)
-                res = super(SaltDockerClient, self).create_container(image, *args, **kwargs)
-            self._update_status(TYPE_CONTAINER, kwargs.get('name', res['Id']), CONTAINER_ABSENT, CONTAINER_PRESENT)
-            return res
-
-        def start(self, container, *args, **kwargs):
-            if not __opts__['test']:
-                self._update_attempt(TYPE_CONTAINER, container, CONTAINER_PRESENT, CONTAINER_RUNNING)
-                super(SaltDockerClient, self).start(container, *args, **kwargs)
-            self._update_status(TYPE_CONTAINER, container, CONTAINER_PRESENT, CONTAINER_RUNNING)
-
-        def restart(self, container, *args, **kwargs):
-            if not __opts__['test']:
-                self._update_attempt(TYPE_CONTAINER, container, CONTAINER_RUNNING, CONTAINER_RESTARTED)
-                super(SaltDockerClient, self).restart(container, *args, **kwargs)
-            self._update_status(TYPE_CONTAINER, container, CONTAINER_RUNNING, CONTAINER_RESTARTED)
-
-        def stop(self, container, *args, **kwargs):
-            if not __opts__['test']:
-                self._update_attempt(TYPE_CONTAINER, container, CONTAINER_RUNNING, CONTAINER_STOPPED)
-                super(SaltDockerClient, self).stop(container, *args, **kwargs)
-            self._update_status(TYPE_CONTAINER, container, CONTAINER_RUNNING, CONTAINER_STOPPED)
-
-        def remove_container(self, container, *args, **kwargs):
-            if not __opts__['test']:
-                self._update_attempt(TYPE_CONTAINER, container, CONTAINER_PRESENT, CONTAINER_ABSENT)
-                super(SaltDockerClient, self).remove_container(container, *args, **kwargs)
-            self._update_status(TYPE_CONTAINER, container, CONTAINER_PRESENT, CONTAINER_ABSENT)
-
-        def kill(self, container, *args, **kwargs):
-            if not __opts__['test']:
-                self._update_attempt(TYPE_CONTAINER, container, CONTAINER_PRESENT, CONTAINER_SIGNALED)
-                super(SaltDockerClient, self).kill(container, *args, **kwargs)
-            self._update_status(TYPE_CONTAINER, container, CONTAINER_PRESENT, CONTAINER_SIGNALED)
-
-        def exec_create(self, container, cmd, *args, **kwargs):
-            if not __opts__['test']:
-                self._update_attempt(TYPE_EXEC, '{0} - {1}'.format(container, cmd), EXEC_ABSENT, EXEC_CREATED)
-                exec_info = super(SaltDockerClient, self).exec_create(container, cmd, *args, **kwargs)
-            else:
-                exec_info = {'Id': 0}
-            self._update_status(TYPE_EXEC, exec_info['Id'], EXEC_ABSENT, EXEC_STARTED)
-            return exec_info
-
-        def exec_start(self, exec_id, *args, **kwargs):
-            if not __opts__['test'] and exec_id:
-                self._update_attempt(TYPE_EXEC, exec_id, EXEC_CREATED, EXEC_STARTED)
-                super(SaltDockerClient, self).exec_start(exec_id, *args, **kwargs)
-            self._update_status(TYPE_EXEC, exec_id, EXEC_CREATED, EXEC_STARTED)
 
         def images(self, **kwargs):
             image_list = super(SaltDockerClient, self).images(**kwargs)
@@ -267,47 +205,6 @@ def _create_client(initial_maps):
             self._state_images = image_dict
             return image_list
 
-        def pull(self, repository, tag=None, *args, **kwargs):
-            state_images = self.get_state_images()
-            full_image = '{0}:{1}'.format(repository, tag or 'latest')
-            prev_id = state_images.get(full_image)
-            if prev_id:
-                prev_status = IMAGE_PRESENT
-                new_status = IMAGE_UPDATED
-            else:
-                prev_status = IMAGE_ABSENT
-                new_status = IMAGE_PRESENT
-            if __opts__['test']:
-                res = None
-            else:
-                self._update_attempt(TYPE_IMAGE, full_image, prev_status, new_status)
-                res = super(SaltDockerClient, self).pull(repository, tag, *args, **kwargs)
-                updated_images = super(SaltDockerClient, self).images(repository)
-                if updated_images:
-                    new_image = updated_images[0]
-                    new_id = new_image['Id']
-                    if prev_id and prev_id == new_id:
-                        new_status = IMAGE_PRESENT
-                    new_tags = new_image.get('RepoTags')
-                    if new_tags:
-                        state_images.update({tag: new_id for tag in new_tags})
-                else:
-                    new_status = IMAGE_ABSENT
-            if prev_status != new_status:
-                self._update_status(TYPE_IMAGE, full_image, prev_status, new_status)
-            else:
-                self._reset_status()
-            return res
-
-        def remove_image(self, image, *args, **kwargs):
-            if __opts__['test']:
-                res = None
-            else:
-                self._update_attempt(TYPE_IMAGE, image, IMAGE_PRESENT, IMAGE_ABSENT)
-                res = super(SaltDockerClient, self).remove_image(image, *args, **kwargs)
-            self._update_status(TYPE_IMAGE, image, IMAGE_PRESENT, IMAGE_ABSENT)
-            return res
-
         def push_log(self, info, *args, **kwargs):
             super(SaltDockerClient, self).push_log(info, *args, **kwargs)
             self._log.append(info)
@@ -316,29 +213,15 @@ def _create_client(initial_maps):
             if not __opts__['test']:
                 __salt__['cmd.run'](cmd)
 
-        def flush_changes(self, add_log=False):
-            """
-            Returns the changed items and clears the change log.
-
-            :return: dict[unicode, dict[unicode, unicode]]
-            """
-            changes = self._changes
-            log = self._log
-            self._reset_status()
-            self._reset_log()
-            self._changes = {}
-            if add_log:
-                changes['__log__'] = log
-            return changes
+        def flush_log(self):
+            l = self._log
+            self._log = []
+            return l
 
         def get_state_images(self, refresh=False):
             if self._state_images is None or refresh:
                 self.images()
             return self._state_images
-
-        @property
-        def last_action(self):
-            return self._last_action
 
     class SaltDockerClientConfig(ClientConfiguration):
         """
@@ -390,6 +273,7 @@ def _create_client(initial_maps):
             core_image = _get_setting('container_map', 'core_image')
             if core_image:
                 self.policy_class.core_image = core_image
+            self._test_states = None
 
         @property
         def default_client_name(self):
@@ -407,6 +291,64 @@ def _create_client(initial_maps):
             :rtype: SaltDockerClient
             """
             return self._default_config.get_client()
+
+        def get_runner(self, policy, kwargs):
+            if __opts__['test']:
+                runner = TestOutputRunner(policy, kwargs)
+                self._test_states = runner.test_states
+                return runner
+            self._test_states = None
+            return super(SaltDockerMap, self).get_runner(policy, kwargs)
+
+        def run_actions(self, *args, **kwargs):
+            is_test = __opts__['test']
+            states_before = list(self.get_states(*args, **kwargs))
+            changes = {}
+            results = {
+                'changes': changes,
+            }
+            try:
+                action_output = super(SaltDockerMap, self).run_actions(*args, **kwargs)
+            except ActionRunnerException as e:
+                exc = e
+                action_output = e.results
+            else:
+                exc = None
+
+            output = {_get_item_name(ao.config_id): [ao.action_type.value, ao.result]
+                      for ao in action_output}
+            if output:
+                results['output'] = output
+
+            if is_test:
+                new_states = self._test_states
+            else:
+                new_states = {_get_item_name(state.config_id): state
+                              for state in self.get_states(*args, **kwargs)}
+            for old_state in states_before:
+                item_name = _get_item_name(old_state.config_id)
+                new_state = new_states[item_name]
+                if new_state.base_state == old_state.base_state:
+                    if new_state.extra_data.get('id') != old_state.extra_data.get('id'):
+                        changes[item_name] = {'old': old_state.base_state.value,
+                                              'new': 'updated'}
+                else:
+                    changes[item_name] = {'old': old_state.base_state.value,
+                                          'new': new_state.base_state.value}
+            if is_test:
+                if changes:
+                    results['result'] = True
+                else:
+                    results['result'] = None
+                results['comment'] = _get_success_comment(changes)
+            elif exc is None:
+                results['result'] = True
+                results['comment'] = _get_success_comment(changes)
+            else:
+                error_message = exc.source_message
+                results['result'] = False
+                results['comment'] = _get_failure_comment(changes, error_message, exc.config_id)
+            return results
 
     log.debug("Creating SaltDockerMap instance.")
     default_config = SaltDockerClientConfig()
@@ -657,12 +599,7 @@ def create(container, instances=None, map_name=None, **kwargs):
     kwargs
         Extra keyword arguments for the container creation.
     '''
-    m = get_client()
-    try:
-        m.create(container, instances=instances, map_name=map_name, **clean_kwargs(**kwargs))
-    except SUMMARY_EXCEPTIONS as e:
-        return _status(m.default_client, exception=e)
-    return _status(m.default_client, item_id=container)
+    return get_client().create(container, instances=instances, map_name=map_name, **clean_kwargs(**kwargs))
 
 
 def start(container, instances=None, map_name=None, **kwargs):
@@ -679,12 +616,7 @@ def start(container, instances=None, map_name=None, **kwargs):
     kwargs
         Extra keyword arguments for the container start.
     '''
-    m = get_client()
-    try:
-        m.start(container, instances=instances, map_name=map_name, **clean_kwargs(**kwargs))
-    except SUMMARY_EXCEPTIONS as e:
-        return _status(m.default_client, exception=e)
-    return _status(m.default_client, item_id=container)
+    return get_client().start(container, instances=instances, map_name=map_name, **clean_kwargs(**kwargs))
 
 
 def stop(container, instances=None, map_name=None, **kwargs):
@@ -700,12 +632,7 @@ def stop(container, instances=None, map_name=None, **kwargs):
     kwargs
         Extra keyword arguments for the container stop.
     '''
-    m = get_client()
-    try:
-        m.stop(container, instances=instances, map_name=map_name, **clean_kwargs(**kwargs))
-    except SUMMARY_EXCEPTIONS as e:
-        return _status(m.default_client, exception=e)
-    return _status(m.default_client, item_id=container)
+    return get_client().stop(container, instances=instances, map_name=map_name, **clean_kwargs(**kwargs))
 
 
 def remove(container, instances=None, map_name=None, **kwargs):
@@ -722,12 +649,7 @@ def remove(container, instances=None, map_name=None, **kwargs):
     kwargs
         Extra keyword arguments for the container removal.
     '''
-    m = get_client()
-    try:
-        m.remove(container, instances=instances, map_name=map_name, **clean_kwargs(**kwargs))
-    except SUMMARY_EXCEPTIONS as e:
-        return _status(m.default_client, exception=e)
-    return _status(m.default_client, item_id=container)
+    return get_client().remove(container, instances=instances, map_name=map_name, **clean_kwargs(**kwargs))
 
 
 def restart(container, instances=None, map_name=None, **kwargs):
@@ -743,12 +665,7 @@ def restart(container, instances=None, map_name=None, **kwargs):
     kwargs
         Extra keyword arguments for the container restart.
     '''
-    m = get_client()
-    try:
-        m.restart(container, instances=instances, map_name=map_name, **clean_kwargs(**kwargs))
-    except SUMMARY_EXCEPTIONS as e:
-        return _status(m.default_client, exception=e)
-    return _status(m.default_client, item_id=container)
+    return get_client().restart(container, instances=instances, map_name=map_name, **clean_kwargs(**kwargs))
 
 
 def startup(container, instances=None, map_name=None, **kwargs):
@@ -764,12 +681,7 @@ def startup(container, instances=None, map_name=None, **kwargs):
     kwargs
         Extra keyword arguments for the container startup.
     '''
-    m = get_client()
-    try:
-        m.startup(container, instances=instances, map_name=map_name, **clean_kwargs(**kwargs))
-    except SUMMARY_EXCEPTIONS as e:
-        return _status(m.default_client, exception=e)
-    return _status(m.default_client, item_id=container)
+    return get_client().startup(container, instances=instances, map_name=map_name, **clean_kwargs(**kwargs))
 
 
 def shutdown(container, instances=None, map_name=None, **kwargs):
@@ -785,12 +697,7 @@ def shutdown(container, instances=None, map_name=None, **kwargs):
     kwargs
         Extra keyword arguments for the container shutdown.
     '''
-    m = get_client()
-    try:
-        m.shutdown(container, instances=instances, map_name=map_name, **clean_kwargs(**kwargs))
-    except SUMMARY_EXCEPTIONS as e:
-        return _status(m.default_client, exception=e)
-    return _status(m.default_client, item_id=container)
+    return get_client().shutdown(container, instances=instances, map_name=map_name, **clean_kwargs(**kwargs))
 
 
 def update(container, instances=None, map_name=None, reload_signal=None, **kwargs):
@@ -817,43 +724,45 @@ def update(container, instances=None, map_name=None, reload_signal=None, **kwarg
     '''
     config_ids = get_map_config_ids(container, map_name=map_name, instances=instances)
     m = get_client()
-    c = m.default_client
-    policy = m.get_policy()
-    names = {policy.cname(config_id.map_name, config_id.config_name, config_id.instance_name)
-             for config_id in config_ids}
-    try:
-        m.update(config_ids, **clean_kwargs(**kwargs))
-    except SUMMARY_EXCEPTIONS as e:
-        return _status(c, exception=e)
-    res = _status(c, item_id=container)
+    res = m.update(config_ids, **clean_kwargs(**kwargs))
+    is_test = __opts__['test']
     if reload_signal:
-        changed = set(res['changes'].keys())
+        changes = res['changes']
+        res_comment = '{0}\n'.format(res['comment']) if changes else ''
+        updated = {item for item, status in six.iteritems(changes)
+                   if status['new'] == 'updated'}
         errors = {}
-        for ci_name in names - changed:
+        signaled = {}
+        c = m.default_client
+        policy = m.get_policy()
+        for config_id in config_ids:
+            item_name = _get_item_name(config_id)
+            if item_name in updated:
+                continue
+            if is_test:
+                signaled[item_name] = {'old': 'running', 'new': 'signaled'}
+                continue
+            ci_name = policy.cname(config_id.map_name, config_id.config_name, config_id.instance_name)
             try:
                 c.kill(ci_name, signal=reload_signal)
             except SUMMARY_EXCEPTIONS as e:
-                errors[ci_name] = _exc_message(e)
-        signal_status = c.flush_changes()
-        if errors:
-            if signal_status:
-                comment = "Failed to send signal {0} to some containers.".format(reload_signal)
+                errors[item_name] = _exc_message(e)
             else:
-                comment = "Failed to send signal {0} to all containers.".format(reload_signal)
+                signaled[item_name] = {'old': 'running', 'new': 'signaled'}
+        changes.update(signaled)
+        if errors:
+            if signaled:
+                comment = "{0}Failed to send signal {1} to some containers.".format(res_comment, reload_signal)
+            else:
+                comment = "{0}Failed to send signal {1} to all containers.".format(res_comment, reload_signal)
             res.update(result=False, comment=comment, out=errors)
         else:
-            res['changes'].update(signal_status)
-            res['comment'] = "Signal {0} sent to selected containers.".format(reload_signal)
+            res['comment'] = "{0}Signal {1} sent to selected containers.".format(res_comment, reload_signal)
     return res
 
 
 def kill(container, instances=None, map_name=None, signal=None, **kwargs):
-    m = get_client()
-    try:
-        m.signal(container, instances=instances, map_name=map_name, signal=signal, **clean_kwargs(**kwargs))
-    except SUMMARY_EXCEPTIONS as e:
-        return _status(m.default_client, exception=e)
-    return _status(m.default_client, item_id=container)
+    return get_client().signal(container, instances=instances, map_name=map_name, signal=signal, **clean_kwargs(**kwargs))
 
 
 def cleanup_containers(include_initial=False, exclude=None):
@@ -866,11 +775,29 @@ def cleanup_containers(include_initial=False, exclude=None):
     excluded_names.update(m.list_persistent_containers())
     log.debug("Removing stopped containers (Exceptions: %s).", ', '.join(excluded_names))
     c = m.default_client
+    is_test = __opts__['test']
     try:
-        c.cleanup_containers(include_initial=include_initial, exclude=excluded_names)
-    except SUMMARY_EXCEPTIONS as e:
-        return _status(c, exception=e)
-    return _status(c)
+        removed_containers = c.cleanup_containers(include_initial=include_initial, exclude=excluded_names,
+                                                  list_only=is_test)
+    except PartialResultsError as e:
+        removed_containers = e.results
+        error_message = e.source_message
+        if is_test:
+            result = None
+        else:
+            result = False
+    else:
+        result = True
+        error_message = None
+    changes = {'container:{0}'.format(image): {'old': 'running', 'new': 'absent'}
+               for image in removed_containers}
+    if result:
+        comment = _get_success_comment(changes)
+    else:
+        comment = _get_failure_comment(changes, error_message)
+    return {'result': result,
+            'changes': changes,
+            'comment': comment}
 
 
 def cleanup_images(remove_old=False, keep_tags=None):
@@ -885,11 +812,28 @@ def cleanup_images(remove_old=False, keep_tags=None):
         Keep only images that have any of the specified tags.
     '''
     c = get_client().default_client
+    is_test = __opts__['test']
     try:
-        c.cleanup_images(remove_old=remove_old, keep_tags=keep_tags)
-    except SUMMARY_EXCEPTIONS as e:
-        return _status(c, exception=e)
-    return _status(c)
+        removed_images = c.cleanup_images(remove_old=remove_old, keep_tags=keep_tags, list_only=is_test)
+    except PartialResultsError as e:
+        removed_images = e.results
+        error_message = e.source_message
+        if is_test:
+            result = None
+        else:
+            result = False
+    else:
+        result = True
+        error_message = None
+    changes = {'image:{0}'.format(image): {'old': 'present', 'new': 'absent'}
+               for image in removed_images}
+    if result:
+        comment = _get_success_comment(changes)
+    else:
+        comment = _get_failure_comment(changes, error_message)
+    return {'result': result,
+            'changes': changes,
+            'comment': comment}
 
 
 def remove_all_containers(stop_timeout=None, shutdown_maps='__all__', shutdown_first=None):
@@ -908,14 +852,36 @@ def remove_all_containers(stop_timeout=None, shutdown_maps='__all__', shutdown_f
     '''
     stop_timeout = stop_timeout or _get_setting('docker', 'stop_timeout', 10)
     m = get_client()
+    res = m.shutdown(shutdown_first, map_name=shutdown_maps or '__all__')
+    if not res['result']:
+        return res
+    res.update(m.shutdown('__all__', map_name=shutdown_maps or '__all__'))
+    if not res['result']:
+        return res
     c = m.default_client
+    is_test = __opts__['test']
     try:
-        m.shutdown(shutdown_first, map_name=shutdown_maps or '__all__')
-        m.shutdown('__all__', map_name=shutdown_maps or '__all__')
-        c.remove_all_containers(stop_timeout=stop_timeout)
-    except SUMMARY_EXCEPTIONS as e:
-        return _status(c, exception=e)
-    return _status(c)
+        stopped_containers, removed_containers = c.remove_all_containers(stop_timeout=stop_timeout, list_only=is_test)
+    except PartialResultsError as e:
+        stopped_containers, removed_containers = e.results
+        error_message = e.source_message
+        if is_test:
+            result = None
+        else:
+            result = False
+    else:
+        result = True
+        error_message = None
+    changes = res['changes']
+    changes.update({'container:{0}'.format(image): {'old': 'running', 'new': 'stopped'}
+                    for image in removed_containers})
+    changes.update({'container:{0}'.format(image): {'old': 'running', 'new': 'absent'}
+                    for image in removed_containers})
+    if result:
+        res['comment'] = _get_success_comment(changes)
+    else:
+        res['comment'] = _get_failure_comment(changes, error_message)
+    return res
 
 
 def call(action_name, container, instances=None, map_name=None, **kwargs):
@@ -933,12 +899,7 @@ def call(action_name, container, instances=None, map_name=None, **kwargs):
     kwargs
         Extra keyword arguments for the container action.
     '''
-    m = get_client()
-    try:
-        m.call(action_name, container, instances=instances, map_name=map_name, **clean_kwargs(**kwargs))
-    except SUMMARY_EXCEPTIONS as e:
-        return _status(m.default_client, exception=e)
-    return _status(m.default_client, item_id=container)
+    return get_client().call(action_name, container, instances=instances, map_name=map_name, **clean_kwargs(**kwargs))
 
 
 def script(container, instance=None, map_name=None, wait_timeout=10, autoremove_before=False, autoremove_after=True,
@@ -1046,17 +1007,13 @@ def script(container, instance=None, map_name=None, wait_timeout=10, autoremove_
             if script_path:
                 log.debug("Changing user of %s to %s.", script_path, ch_user)
                 __salt__['file.check_perms'](script_path, {}, ch_user, group, file_mode)
-        try:
-            log.debug("Running script in container %s.%s.\nHost path: %s\nEntrypoint: %s\nCommand template: %s",
-                      config_id.map_name, config_id.config_name, script_path or script_dir, entrypoint, command_format)
-            res = m.run_script(config_id,
-                               script_path=script_path or script_dir,
-                               entrypoint=entrypoint, command_format=command_format, wait_timeout=wait_timeout,
-                               container_script_dir=container_script_dir, timestamps=timestamps, tail=tail,
-                               **clean_kwargs(**kwargs))
-            return _status(m.default_client, item_id=container, output=res)
-        except SUMMARY_EXCEPTIONS as e:
-            return _status(m.default_client, exception=e)
+        log.debug("Running script in container %s.%s.\nHost path: %s\nEntrypoint: %s\nCommand template: %s",
+                  config_id.map_name, config_id.config_name, script_path or script_dir, entrypoint, command_format)
+        return m.run_script(config_id,
+                            script_path=script_path or script_dir,
+                            entrypoint=entrypoint, command_format=command_format, wait_timeout=wait_timeout,
+                            container_script_dir=container_script_dir, timestamps=timestamps, tail=tail,
+                            **clean_kwargs(**kwargs))
     finally:
         if temporary_path:
             log.debug("Cleaning up temporary script dir %s.", script_dir)
@@ -1090,18 +1047,25 @@ def pull_images(container=None, map_name=None, utility_images=True, insecure_reg
     m = get_client()
     c = m.default_client
     policy = m.get_policy()
-    try:
-        m.pull_images(container, map_name=map_name, insecure_registry=insecure_registry)
-        if utility_images:
+    res = m.pull_images(container, map_name=map_name, insecure_registry=insecure_registry)
+    if utility_images:
+        changes = res['changes']
+        item_name = None
+        try:
             for image_name in [policy.base_image, policy.core_image]:
+                item_name = 'image:{0}'.format(image_name)
                 name, __, tag = image_name.rpartition(':')
                 if not name:
                     name = tag
                     tag = None
                 c.pull(name, tag=tag, insecure_registry=insecure_registry)
-    except SUMMARY_EXCEPTIONS as e:
-        return _status(m.default_client, exception=e)
-    return _status(m.default_client, item_id=container)
+                changes[item_name] = 'updated'
+        except SUMMARY_EXCEPTIONS as e:
+            res['result'] = False
+            res['comment'] = _get_failure_comment(changes, _exc_message(e), item_name)
+        else:
+            res['comment'] = _get_success_comment(changes)
+    return res
 
 
 def refresh_client():
@@ -1301,13 +1265,25 @@ def build(tag, show_log=True, source=None, saltenv='base', template=None, contex
 
     m = get_client()
     c = m.default_client
-    log.debug("Building image with tag %s.", tag)
-    try:
-        image_id = c.build_from_context(build_context, tag, **clean_kwargs(**kwargs))
-    except SUMMARY_EXCEPTIONS as e:
-        return dict(result=False, item_id=tag, changes={}, comment=_exc_message(e))
-    changes = c.flush_changes(add_log=show_log or not image_id)
-    if image_id:
-        return dict(result=True, item_id=tag, image_id=image_id, changes=changes, comment="Image built.")
-
-    return dict(result=False, item_id=tag, changes=changes, comment="Error while building the image.")
+    state_images = c.get_state_images()
+    image_tag = '{0}:latest'.format(tag) if ':' not in tag else tag
+    prev_image_id = state_images.get(image_tag)
+    item_name = 'image:{0}'.format(image_tag)
+    log.debug("Building image with tag %s.", image_tag)
+    if not __opts__['test']:
+        c.flush_log()
+        try:
+            image_id = c.build_from_context(build_context, tag, **clean_kwargs(**kwargs))
+        except SUMMARY_EXCEPTIONS as e:
+            return dict(result=False, item_id=item_name, changes={}, comment=_exc_message(e))
+        if image_id:
+            if image_id == prev_image_id:
+                return dict(result=True, item_id=item_name, changes={}, comment=_get_success_comment({}))
+            changes = {'image:{0}'.format(image_id): {'old': 'present' if prev_image_id else 'absent',
+                                                      'new': 'built'}}
+            res = dict(result=True, item_id=item_name, image_id=image_id, changes=changes, comment="Image built.")
+            if show_log:
+                res['log'] = c.flush_log()
+            return res
+        return dict(result=False, item_id=item_name, changes={}, comment="Error while building the image.")
+    return dict(result=True, item_id=item_name, changes={}, comment="Image would have been built.")
