@@ -18,11 +18,12 @@ import traceback
 import sys
 
 from docker.errors import APIError, DockerException
+
 from dockermap.functional import expand_type_name, resolve_deep
 from dockermap.api import (DockerClientWrapper, ClientConfiguration, ContainerMap, MappingDockerClient,
-                           DockerFile, DockerContext, ActionRunnerException, PartialResultsError)
+                           DockerFile, DockerContext, ActionRunnerException, PartialResultsError, DockerStatusError,
+                           MapIntegrityError)
 from dockermap.map.action import Action, ImageAction
-from dockermap.map.config.main import MapIntegrityError
 from dockermap.map.input import get_map_config_ids
 from dockermap.map.runner import AbstractRunner
 from salt.exceptions import SaltInvocationError
@@ -33,7 +34,7 @@ from salt.utils import clean_kwargs
 
 VIRTUAL_NAME = 'container_map'
 
-SUMMARY_EXCEPTIONS = (KeyError, ValueError, APIError, DockerException, MapIntegrityError)
+SUMMARY_EXCEPTIONS = (KeyError, ValueError, APIError, DockerException, MapIntegrityError, DockerStatusError)
 
 log = logging.getLogger(__name__)
 
