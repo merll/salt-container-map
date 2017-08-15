@@ -2,6 +2,12 @@
 
 Change History
 ==============
+0.2.0b1
+-------
+* Adapted to upcoming release of Docker-Map, which brings a lot of simplifications and more reliability in detecting
+  changes. Furthermore it should be noted that methods can now be called on multiple configurations at once, and
+  ``groups`` make it a lot easier to manage sets of containers.
+
 0.1.12
 ------
 * Fixed sending wrong signal in ``kill`` function.
