@@ -801,7 +801,7 @@ def cleanup_containers(include_initial=False, exclude=None):
             'comment': comment}
 
 
-def cleanup_images(remove_old=False, keep_tags=None):
+def cleanup_images(**kwargs):
     '''
     Removes all images from the host which are not in use by any container and have no tag. Optionally can also remove
     images with a repository tag that is not the ``latest`` or any other listed tag.
@@ -814,8 +814,9 @@ def cleanup_images(remove_old=False, keep_tags=None):
     '''
     c = get_client().default_client
     is_test = __opts__['test']
+    kwargs.setdefault('list_only', is_test)
     try:
-        removed_images = c.cleanup_images(remove_old=remove_old, keep_tags=keep_tags, list_only=is_test)
+        removed_images = c.cleanup_images(**clean_kwargs(**kwargs))
     except PartialResultsError as e:
         removed_images = e.results
         error_message = e.source_message
@@ -1027,7 +1028,7 @@ def script(container, instance=None, map_name=None, wait_timeout=10, autoremove_
                 pass
 
 
-def pull_images(container=None, map_name=None, utility_images=True, insecure_registry=False):
+def pull_images(container=None, map_name=None, utility_images=True, insecure_registry=False, **kwargs):
     '''
     Updates images on a map to their latest version or the specified tag. If neither container or map name are specified
     all images on all maps are being pulled.
@@ -1048,7 +1049,7 @@ def pull_images(container=None, map_name=None, utility_images=True, insecure_reg
     m = get_client()
     c = m.default_client
     policy = m.get_policy()
-    res = m.pull_images(container, map_name=map_name, insecure_registry=insecure_registry)
+    res = m.pull_images(container, map_name=map_name, insecure_registry=insecure_registry, **clean_kwargs(**kwargs))
     if utility_images:
         changes = res['changes']
         item_name = None
