@@ -875,10 +875,10 @@ def remove_all_containers(stop_timeout=None, shutdown_maps='__all__', shutdown_f
         result = True
         error_message = None
     changes = res['changes']
-    changes.update({'container:{0}'.format(image): {'old': 'running', 'new': 'stopped'}
-                    for image in removed_containers})
-    changes.update({'container:{0}'.format(image): {'old': 'running', 'new': 'absent'}
-                    for image in removed_containers})
+    changes.update({'container:{0}'.format(c): {'old': 'running', 'new': 'stopped'}
+                    for c in stopped_containers})
+    changes.update({'container:{0}'.format(c): {'old': 'running', 'new': 'absent'}
+                    for c in removed_containers})
     if result:
         res['comment'] = _get_success_comment(changes)
     else:
@@ -1050,6 +1050,11 @@ def pull_images(container=None, map_name=None, utility_images=True, insecure_reg
     c = m.default_client
     policy = m.get_policy()
     res = m.pull_images(container, map_name=map_name, insecure_registry=insecure_registry, **clean_kwargs(**kwargs))
+    output = res['output']
+    # Removing output that has no additional info to changes.
+    remove_output = {k for k, v in six.iteritems(output) if v[1] is True}
+    for r in remove_output:
+        del output[r]
     if utility_images:
         changes = res['changes']
         item_name = None
