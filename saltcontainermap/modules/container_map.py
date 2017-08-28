@@ -220,8 +220,10 @@ def _create_client(initial_maps):
             return l
 
         def get_state_images(self, refresh=False):
-            if self._state_images is None or refresh:
+            if self._state_images is None or refresh is True:
                 self.images()
+            elif refresh:
+                self.images(name=refresh)
             return self._state_images
 
     class SaltDockerClientConfig(ClientConfiguration):
@@ -1056,17 +1058,27 @@ def pull_images(container=None, map_name=None, utility_images=True, insecure_reg
     for r in remove_output:
         del output[r]
     if utility_images:
+        state_images = c.get_state_images()
         changes = res['changes']
         item_name = None
         try:
             for image_name in [policy.base_image, policy.core_image]:
-                item_name = 'image:{0}'.format(image_name)
                 name, __, tag = image_name.rpartition(':')
-                if not name:
+                if name:
+                    image_tag = image_name
+                else:
                     name = tag
-                    tag = None
+                    tag = 'latest'
+                    image_tag = '{0}:latest'.format(name)
+                item_name = 'image:{0}'.format(image_tag)
+                prev_image_id = state_images.get(image_tag)
                 c.pull(name, tag=tag, insecure_registry=insecure_registry)
-                changes[item_name] = 'updated'
+                new_image_id = c.get_state_images(refresh=name)[image_tag]
+                if prev_image_id != new_image_id:
+                    changes[item_name] = {
+                        'old': 'present' if prev_image_id else 'absent',
+                        'new': 'updated',
+                    }
         except SUMMARY_EXCEPTIONS as e:
             res['result'] = False
             res['comment'] = _get_failure_comment(changes, _exc_message(e), item_name)
