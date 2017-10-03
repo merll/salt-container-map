@@ -1052,7 +1052,7 @@ def pull_images(container=None, map_name=None, utility_images=True, insecure_reg
     c = m.default_client
     policy = m.get_policy()
     res = m.pull_images(container, map_name=map_name, insecure_registry=insecure_registry, **clean_kwargs(**kwargs))
-    output = res['output']
+    output = res.get('output', {})
     # Removing output that has no additional info to changes.
     remove_output = {k for k, v in six.iteritems(output) if v[1] is True}
     for r in remove_output:
