@@ -303,15 +303,15 @@ def _create_client(initial_maps):
             self._test_states = None
             return super(SaltDockerMap, self).get_runner(policy, kwargs)
 
-        def run_actions(self, *args, **kwargs):
+        def run_actions(self, action_name, *args, **kwargs):
             is_test = __opts__['test']
-            states_before = list(self.get_states(*args, **kwargs))
+            states_before = list(self.get_states(action_name, *args, **kwargs))
             changes = {}
             results = {
                 'changes': changes,
             }
             try:
-                action_output = super(SaltDockerMap, self).run_actions(*args, **kwargs)
+                action_output = super(SaltDockerMap, self).run_actions(action_name, *args, **kwargs)
             except ActionRunnerException as e:
                 exc = e
                 action_output = e.results
@@ -323,21 +323,32 @@ def _create_client(initial_maps):
             if output:
                 results['output'] = output
 
-            if is_test:
-                new_states = self._test_states
-            else:
-                new_states = {_get_item_name(state.config_id): state
-                              for state in self.get_states(*args, **kwargs)}
-            for old_state in states_before:
-                item_name = _get_item_name(old_state.config_id)
-                new_state = new_states[item_name]
-                if new_state.base_state == old_state.base_state:
-                    if new_state.extra_data.get('id') != old_state.extra_data.get('id'):
-                        changes[item_name] = {'old': old_state.base_state.value,
-                                              'new': 'updated'}
-                else:
+            if action_name == 'signal':
+                for old_state in states_before:
+                    item_name = _get_item_name(old_state.config_id)
                     changes[item_name] = {'old': old_state.base_state.value,
-                                          'new': new_state.base_state.value}
+                                          'new': 'signaled'}
+            else:
+                if is_test:
+                    new_states = self._test_states
+                else:
+                    new_states = {_get_item_name(state.config_id): state
+                                  for state in self.get_states(action_name, *args, **kwargs)}
+                for old_state in states_before:
+                    item_name = _get_item_name(old_state.config_id)
+                    new_state = new_states[item_name]
+                    if new_state.base_state == old_state.base_state:
+                        new_detail = new_state.extra_data
+                        old_detail = old_state.extra_data
+                        if new_detail.get('id') != old_detail.get('id'):
+                            changes[item_name] = {'old': old_state.base_state.value,
+                                                  'new': 'updated'}
+                        elif new_detail.get('pid') != old_detail.get('pid'):
+                            changes[item_name] = {'old': old_state.base_state.value,
+                                                  'new': 'restarted'}
+                    else:
+                        changes[item_name] = {'old': old_state.base_state.value,
+                                              'new': new_state.base_state.value}
             if is_test:
                 if changes:
                     results['result'] = True
