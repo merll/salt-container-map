@@ -2,6 +2,12 @@
 
 Change History
 ==============
+0.2.0b2
+-------
+* Fixed input of config references including an instance name.
+* Improved detection of container restarts.
+* Fixed state for signal action.
+
 0.2.0b1
 -------
 * Adapted to upcoming release of Docker-Map, which brings a lot of simplifications and more reliability in detecting
