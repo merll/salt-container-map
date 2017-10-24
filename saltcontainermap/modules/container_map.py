@@ -24,7 +24,7 @@ from dockermap.api import (DockerClientWrapper, ClientConfiguration, ContainerMa
                            DockerFile, DockerContext, ActionRunnerException, PartialResultsError, DockerStatusError,
                            MapIntegrityError)
 from dockermap.map.action import Action, ImageAction
-from dockermap.map.input import get_map_config_ids
+from dockermap.map.config.utils import get_map_config_ids
 from dockermap.map.runner import AbstractRunner
 from salt.exceptions import SaltInvocationError
 from salt.ext import six
@@ -736,8 +736,9 @@ def update(container, instances=None, map_name=None, reload_signal=None, **kwarg
     kwargs
         Extra keyword arguments for the container update.
     '''
-    config_ids = get_map_config_ids(container, map_name=map_name, instances=instances)
     m = get_client()
+    policy = m.get_policy()
+    config_ids = get_map_config_ids(container, policy.container_maps, map_name, instances)
     res = m.update(config_ids, **clean_kwargs(**kwargs))
     is_test = __opts__['test']
     if reload_signal:
@@ -748,7 +749,6 @@ def update(container, instances=None, map_name=None, reload_signal=None, **kwarg
         errors = {}
         signaled = {}
         c = m.default_client
-        policy = m.get_policy()
         for config_id in config_ids:
             item_name = _get_item_name(config_id)
             if item_name in updated:
@@ -1009,9 +1009,9 @@ def script(container, instance=None, map_name=None, wait_timeout=10, autoremove_
                     if content_str[-1] != '\n':
                         script_file.write('\n')
 
-        config_id = get_map_config_ids(container, map_name=map_name, instances=instance)[0]
         m = get_client()
         policy = m.get_policy()
+        config_id = get_map_config_ids(container, policy.container_maps, map_name, instance)[0]
         policy.remove_existing_before = autoremove_before
         policy.remove_created_after = autoremove_after
 
