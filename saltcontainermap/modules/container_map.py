@@ -17,7 +17,7 @@ import tempfile
 import traceback
 import sys
 
-from docker.errors import APIError, DockerException
+from docker.errors import APIError, DockerException, NotFound
 
 from dockermap.functional import expand_type_name, resolve_deep
 from dockermap.api import (DockerClientWrapper, ClientConfiguration, ContainerMap, MappingDockerClient,
@@ -25,6 +25,8 @@ from dockermap.api import (DockerClientWrapper, ClientConfiguration, ContainerMa
                            MapIntegrityError)
 from dockermap.map.action import Action, ImageAction
 from dockermap.map.config.utils import get_map_config_ids
+from dockermap.map.input import ItemType
+from dockermap.map.policy.utils import get_instance_volumes
 from dockermap.map.runner import AbstractRunner
 from salt.exceptions import SaltInvocationError
 from salt.ext import six
@@ -1096,6 +1098,36 @@ def pull_images(container=None, map_name=None, utility_images=True, insecure_reg
         else:
             res['comment'] = _get_success_comment(changes)
     return res
+
+
+def get_volumes(container=None, map_name=None, instances=None):
+    '''
+    Extracts volume information for one or multiple containers.
+
+    container
+        Container configuration name.
+    instances
+        Optional list of instance names.
+    map_name
+        Container map name.
+    '''
+    m = get_client()
+    policy = m.get_policy()
+    config_ids = get_map_config_ids(container, policy.container_maps, map_name, instances)
+    client = m.default_client
+    all_volumes = {}
+    for config_id in config_ids:
+        if config_id.config_type != ItemType.CONTAINER:
+            continue
+        item_name = _get_item_name(config_id)
+        c_name = policy.cname(config_id.map_name, config_id.config_name, config_id.instance_name)
+        try:
+            c_info = client.inspect_container(c_name)
+        except NotFound:
+            all_volumes[item_name] = "Container does not exist."
+        else:
+            all_volumes[item_name] = get_instance_volumes(c_info, True)
+    return all_volumes
 
 
 def refresh_client():
