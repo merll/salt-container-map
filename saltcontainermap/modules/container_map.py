@@ -922,7 +922,7 @@ def call(action_name, container, instances=None, map_name=None, **kwargs):
 def script(container, instance=None, map_name=None, wait_timeout=10, autoremove_before=False, autoremove_after=True,
            source=None, saltenv='base', template=None, contents=None, content_pillar=None, path=None, file_mode=None,
            dir_mode=None, user=None, group=None, entrypoint=None, command_format=None,
-           container_script_dir='/tmp/script_run', timestamps=None, tail='all', **kwargs):
+           container_script_dir='/tmp/script_run', allow_multiple=False, timestamps=None, tail='all', **kwargs):
     '''
     Runs a script inside a configured container. The container is specifically created for this purpose (in difference
     to the ``dockerio`` implementation, which executes in a running container). After the script is done, newly
@@ -970,6 +970,11 @@ def script(container, instance=None, map_name=None, wait_timeout=10, autoremove_
         a variable ``{script_path}`` for substituting host-paths with container mount points.
     container_script_dir : '/tmp/script_run'
         Directory to use as mount point inside the container.
+    allow_multiple : False
+        By default only one container is allowed to run a script. This condition is enforced by checking the container
+        names selected by the input (e.g. if there are mutiple instances). This check can be deactivated by setting
+        this to ``True``. Note that in this case the aforementioned ``user`` has to be specified as it may be ambiguous
+        otherwise.
     timestamps
         Include time stamps with `stdout` output. Passed to `docker-py`.
     tail : 'all'
@@ -1013,23 +1018,26 @@ def script(container, instance=None, map_name=None, wait_timeout=10, autoremove_
 
         m = get_client()
         policy = m.get_policy()
-        config_id = get_map_config_ids(container, policy.container_maps, map_name, instance)[0]
-        policy.remove_existing_before = autoremove_before
-        policy.remove_created_after = autoremove_after
+        config_ids = get_map_config_ids(container, policy.container_maps, map_name, instance)
+        config_count = len(config_ids)
+        if config_count > 1 and not allow_multiple:
+            raise SaltInvocationError("More than one ({0}) container would be run. Please narrow the selection or run "
+                                      "with kwarg 'allow_multiple=True'.".format(config_count))
 
-        if script_dir:
-            ch_user = user or m.maps[config_id.map_name].containers[config_id.config_name].user
+        if script_dir and config_count == 1:
+            ch_user = user or m.maps[config_ids[0].map_name].containers[config_ids[0].config_name].user
             log.debug("Changing user of %s to %s.", script_dir, ch_user)
             __salt__['file.check_perms'](script_dir, {}, ch_user, group, dir_mode)
             if script_path:
                 log.debug("Changing user of %s to %s.", script_path, ch_user)
                 __salt__['file.check_perms'](script_path, {}, ch_user, group, file_mode)
-        log.debug("Running script in container %s.%s.\nHost path: %s\nEntrypoint: %s\nCommand template: %s",
-                  config_id.map_name, config_id.config_name, script_path or script_dir, entrypoint, command_format)
-        return m.run_script(config_id,
+        log.debug("Running script in container(s) %s.\nHost path: %s\nEntrypoint: %s\nCommand template: %s",
+                  config_ids, script_path or script_dir, entrypoint, command_format)
+        return m.run_script(config_ids,
                             script_path=script_path or script_dir,
                             entrypoint=entrypoint, command_format=command_format, wait_timeout=wait_timeout,
                             container_script_dir=container_script_dir, timestamps=timestamps, tail=tail,
+                            remove_existing_before=autoremove_before, remove_created_after=autoremove_after,
                             **clean_kwargs(**kwargs))
     finally:
         if temporary_path:
