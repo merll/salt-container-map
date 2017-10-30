@@ -28,6 +28,7 @@ from dockermap.map.config.utils import get_map_config_ids
 from dockermap.map.input import ItemType
 from dockermap.map.policy.utils import get_instance_volumes
 from dockermap.map.runner import AbstractRunner
+from dockermap.map.state import StateFlags
 from salt.exceptions import SaltInvocationError
 from salt.ext import six
 from salt.ext.six.moves import zip
@@ -37,6 +38,7 @@ from salt.utils import clean_kwargs
 VIRTUAL_NAME = 'container_map'
 
 SUMMARY_EXCEPTIONS = (KeyError, ValueError, APIError, DockerException, MapIntegrityError, DockerStatusError)
+ANY_NETWORK_UPDATE = StateFlags.NETWORK_DISCONNECTED | StateFlags.NETWORK_LEFT | StateFlags.NETWORK_MISMATCH
 
 log = logging.getLogger(__name__)
 
@@ -343,14 +345,19 @@ def _create_client(initial_maps):
                         new_detail = new_state.extra_data
                         old_detail = old_state.extra_data
                         if new_detail.get('id') != old_detail.get('id'):
-                            changes[item_name] = {'old': old_state.base_state.value,
-                                                  'new': 'updated'}
+                            changed_state = 'updated'
                         elif new_detail.get('pid') != old_detail.get('pid'):
-                            changes[item_name] = {'old': old_state.base_state.value,
-                                                  'new': 'restarted'}
+                            changed_state = 'restarted'
+                        elif (old_state.state_flags & ANY_NETWORK_UPDATE and
+                              old_state.state_flags != new_state.state_flags):
+                            changed_state = 'network-updated'
+                        else:
+                            changed_state = None
                     else:
+                        changed_state = new_state.base_state.value
+                    if changed_state:
                         changes[item_name] = {'old': old_state.base_state.value,
-                                              'new': new_state.base_state.value}
+                                              'new': changed_state}
             if is_test:
                 if changes:
                     results['result'] = True
