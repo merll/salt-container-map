@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 '''
 Module for managing containers, configured through `Docker-Map <https://github.com/merll/docker-map>`_, along with
-dependencies in Salt states. It complements Salt's ``dockerio`` module with the following functionality:
+dependencies in Salt states. It complements Salt's ``dockerng`` module with the following functionality:
 
 * Implicit dependency check of containers based on volumes and links.
 * Automated provision of containers for the purpose of selectively sharing data between containers (`attached`
