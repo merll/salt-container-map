@@ -351,6 +351,9 @@ def _create_client(initial_maps):
                         elif (old_state.state_flags & ANY_NETWORK_UPDATE and
                               old_state.state_flags != new_state.state_flags):
                             changed_state = 'network-updated'
+                        elif (old_state.state_flags & StateFlags.EXEC_COMMANDS and
+                              old_state.state_flags != new_state.state_flags):
+                            changed_state = 'exec-command-run'
                         else:
                             changed_state = None
                     else:
