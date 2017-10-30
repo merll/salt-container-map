@@ -6,6 +6,7 @@ Change History
 -------
 * Fixed script runner input argument handling.
 * Added utility method ``get_volumes`` to show volumes of a running container instance.
+* Improved change reporting for runtime container updates - network changes and exec commands.
 
 0.2.0b2
 -------
