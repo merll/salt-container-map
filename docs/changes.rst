@@ -2,6 +2,11 @@
 
 Change History
 ==============
+0.2.0b3
+-------
+* Fixed script runner input argument handling.
+* Added utility method ``get_volumes`` to show volumes of a running container instance.
+
 0.2.0b2
 -------
 * Fixed input of config references including an instance name.
