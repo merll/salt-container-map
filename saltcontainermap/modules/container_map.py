@@ -348,11 +348,9 @@ def _create_client(initial_maps):
                             changed_state = 'updated'
                         elif new_detail.get('pid') != old_detail.get('pid'):
                             changed_state = 'restarted'
-                        elif (old_state.state_flags & ANY_NETWORK_UPDATE and
-                              old_state.state_flags != new_state.state_flags):
+                        elif old_state.state_flags & ANY_NETWORK_UPDATE:
                             changed_state = 'network-updated'
-                        elif (old_state.state_flags & StateFlags.EXEC_COMMANDS and
-                              old_state.state_flags != new_state.state_flags):
+                        elif old_state.state_flags & StateFlags.EXEC_COMMANDS:
                             changed_state = 'exec-command-run'
                         else:
                             changed_state = None
