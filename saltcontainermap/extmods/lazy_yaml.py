@@ -52,4 +52,4 @@ def expand_grain_lazy(loader, node):
 
 
 yaml.add_constructor('!pillar', expand_pillar_lazy, SaltYamlSafeLoader)
-yaml.add_constructor('!grain', expand_pillar_lazy, SaltYamlSafeLoader)
+yaml.add_constructor('!grain', expand_grain_lazy, SaltYamlSafeLoader)
