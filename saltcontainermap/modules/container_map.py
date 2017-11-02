@@ -870,19 +870,24 @@ def remove_all_containers(stop_timeout=None, shutdown_maps='__all__', shutdown_f
         in the configuration, unless ``shutdown_maps`` is set to ``None`` and ``shutdown_first`` is not set.
     shutdown_maps
         List of maps to go over all container configurations and shut down properly prior to simply stopping and
-        removing everything there is on the host.
+        removing everything that is left on the host. Default is ``__all__``. Set to ``None`` for deactivating this
+        behavior.
     shutdown_first
-        List of container configurations to shut down first, even before ``shutdown_maps``. Any configuration that
-        is not valid on the host is ignored.
+        Optional container configurations to shut down first, even before ``shutdown_maps``. Note that if this is set,
+        and ``shutdown_maps`` is ``None``, a configuration without map specification will be looked up on all maps.
     '''
     stop_timeout = stop_timeout or _get_setting('docker', 'stop_timeout', 10)
     m = get_client()
-    res = m.shutdown(shutdown_first, map_name=shutdown_maps or '__all__')
-    if not res['result']:
-        return res
-    res.update(m.shutdown('__all__', map_name=shutdown_maps or '__all__'))
-    if not res['result']:
-        return res
+    if shutdown_first:
+        res = m.shutdown(shutdown_first, map_name=shutdown_maps or '__all__')
+        if not res['result']:
+            return res
+    else:
+        res = {}
+    if shutdown_maps:
+        res.update(m.shutdown('__all__', map_name=shutdown_maps))
+        if not res['result']:
+            return res
     c = m.default_client
     is_test = __opts__['test']
     try:
