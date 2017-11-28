@@ -2,6 +2,12 @@
 
 Change History
 ==============
+0.2.0
+-----
+* Fixed bug in template tag expansion.
+* Fixed that command output could be overwritten by another command on the same configuration.
+* Fixed behavior of ``remove_all_containers``, with and without arguments.
+
 0.2.0rc1
 --------
 * Fixed script runner input argument handling.
