@@ -16,6 +16,8 @@ import shutil
 import tempfile
 import traceback
 import sys
+from itertools import groupby
+from operator import itemgetter
 
 from docker.errors import APIError, DockerException, NotFound
 
@@ -27,7 +29,7 @@ from dockermap.map.action import Action, ImageAction
 from dockermap.map.config.utils import get_map_config_ids
 from dockermap.map.input import ItemType
 from dockermap.map.policy.utils import get_instance_volumes
-from dockermap.map.runner import AbstractRunner
+from dockermap.map.runner import AbstractRunner, ActionOutput
 from dockermap.map.state import StateFlags
 from salt.exceptions import SaltInvocationError
 from salt.ext import six
@@ -40,6 +42,7 @@ VIRTUAL_NAME = 'container_map'
 SUMMARY_EXCEPTIONS = (KeyError, ValueError, APIError, DockerException, MapIntegrityError, DockerStatusError)
 ANY_NETWORK_UPDATE = StateFlags.NETWORK_DISCONNECTED | StateFlags.NETWORK_LEFT | StateFlags.NETWORK_MISMATCH
 
+get_action_output_cid_key = itemgetter(ActionOutput._fields.index('config_id'))
 log = logging.getLogger(__name__)
 
 try:
@@ -322,8 +325,13 @@ def _create_client(initial_maps):
             else:
                 exc = None
 
-            output = {_get_item_name(ao.config_id): [ao.action_type.value, ao.result]
-                      for ao in action_output}
+            output = {
+                _get_item_name(config_id): [
+                    [ao.action_type.value, ao.result]
+                    for ao in config_output
+                ]
+                for config_id, config_output in groupby(action_output, get_action_output_cid_key)
+            }
             if output:
                 results['output'] = output
 
