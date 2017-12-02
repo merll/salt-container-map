@@ -1094,11 +1094,16 @@ def pull_images(container=None, map_name=None, utility_images=True, insecure_reg
     c = m.default_client
     policy = m.get_policy()
     res = m.pull_images(container, map_name=map_name, insecure_registry=insecure_registry, **clean_kwargs(**kwargs))
-    output = res.get('output', {})
-    # Removing output that has no additional info to changes.
-    remove_output = {k for k, v in six.iteritems(output) if v[1] is True}
-    for r in remove_output:
-        del output[r]
+    output = res.get('output')
+    if output:
+        # Removing output that has no additional info to changes.
+        filtered_output = ((config_id, [[action_name, output]
+                                        for action_name, output in output_list
+                                        if not (action_name == 'pull_image' and output is True)])
+                           for config_id, output_list in six.iteritems(output))
+        res['output'] = {config_id: out
+                         for config_id, out in filtered_output
+                         if out}
     if utility_images:
         state_images = c.get_state_images()
         changes = res['changes']
@@ -1127,6 +1132,10 @@ def pull_images(container=None, map_name=None, utility_images=True, insecure_reg
         else:
             res['comment'] = _get_success_comment(changes)
     return res
+
+
+# Alias for simpler use.
+pull = pull_images
 
 
 def get_volumes(container=None, map_name=None, instances=None):
