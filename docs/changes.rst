@@ -2,6 +2,11 @@
 
 Change History
 ==============
+0.2.1
+-----
+* Fixed bug in processing output from ``pull_images``.
+* Added alias ``pull`` for ``pull_images``.
+
 0.2.0
 -----
 * Fixed bug in template tag expansion.
