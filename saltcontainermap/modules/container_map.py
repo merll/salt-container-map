@@ -360,6 +360,8 @@ def _create_client(initial_maps):
                             changed_state = 'network-updated'
                         elif old_state.state_flags & StateFlags.EXEC_COMMANDS:
                             changed_state = 'exec-command-run'
+                        elif old_state.state_flags & StateFlags.HOST_CONFIG_UPDATE:
+                            changed_state = 'host-config-updated'
                         else:
                             changed_state = None
                     else:
