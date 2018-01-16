@@ -2,6 +2,11 @@
 
 Change History
 ==============
+0.2.2
+-----
+* Added state distinction for host-config updates, as implemented in Docker-Map ``1.0.0``.
+* Added ``show`` command for displaying imported maps as a dictionary.
+
 0.2.1
 -----
 * Fixed bug in processing output from ``pull_images``.
