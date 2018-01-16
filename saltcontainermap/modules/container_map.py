@@ -1168,6 +1168,23 @@ def get_volumes(container=None, map_name=None, instances=None):
     return all_volumes
 
 
+def show(map_name=None):
+    '''
+    Shows all configurations of one or multiple maps.
+
+    map_name
+        Optional map name to filter on.
+    '''
+    maps = get_client().get_policy().container_maps
+    if map_name:
+        i_maps = {map_name: maps[map_name]}
+    else:
+        i_maps = maps
+    map_dicts = {map_name: c_map.as_dict()
+                 for map_name, c_map in six.iteritems(i_maps)}
+    return map_dicts
+
+
 def refresh_client():
     '''
     Drops the cached client instance, and forces a re-instantiation on the next request.
